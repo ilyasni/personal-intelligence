@@ -33,7 +33,7 @@
 | X-05 | `memory-projector` | X | DONE | codex | runtime-v1.0.0 | Postgres canonical writes + Neo4j projection + embedding jobs |
 | E-01 | `mcp-rest-api` baseline | E | DONE | codex | runtime-v1.0.0 | grounded retrieval endpoints + reprocess endpoint |
 | E-02 | Analytics layer v1 | E | DONE | codex | runtime-v1.0.0 | overview, conversations, basic HTML UI |
-| E-03 | Admin UI baseline | E | DONE | codex | runtime-v1.0.9 | multi-page operator UI with overview, conversations, tasks, people, chats, operator actions, detail drill-downs, flash UX, and person block controls |
+| E-03 | Admin UI baseline | E | DONE | codex | runtime-v1.1.0 | multi-page operator UI with overview, conversations, tasks, people, chats, operator actions, detail drill-downs, flash UX, person block controls, and direct LAN entrypoint |
 | F-01 | Cutover verification | F | DONE | codex | runtime-v1.0.1 | canonical compose live on server, smoke strict green, cutover audit green, orphan groups absent |
 | F-02 | Deploy automation | F | DONE | codex | runtime-v1.0.5 | manual GitHub Actions deploy + remote rollout script + containerized migration-runner |
 
@@ -58,6 +58,7 @@
 | sprint-14 | 2026-05-14 | E-03 follow-up | operator actions online | detail pages, reprocess flow, task status updates, and chat allowlist toggles made the admin UI operational |
 | sprint-15 | 2026-05-14 | E-03 stabilization | live detail pages verified on server | Postgres/Neo4j shape mismatches were fixed and admin UX flows now pass end-to-end smoke on runtime |
 | sprint-16 | 2026-05-14 | E-03 UX follow-up | privacy controls and flash feedback online | operator actions now acknowledge success states and person block/unblock is exposed as a real admin control |
+| sprint-17 | 2026-05-14 | E-03 access follow-up | direct LAN admin entrypoint online | mcp-rest-api now redirects `/` to `/admin` and can be published to `http://192.168.31.165` without SSH tunneling |
 
 ## Releases
 
@@ -82,6 +83,7 @@
 | v1.0.7 | 2026-05-14 | admin operator actions + detail drill-down pages | runtime-v1.0.7 |
 | v1.0.8 | 2026-05-14 | admin detail-page stabilization + live server UX smoke | runtime-v1.0.8 |
 | v1.0.9 | 2026-05-14 | admin flash UX + person block/unblock controls | runtime-v1.0.9 |
+| v1.1.0 | 2026-05-14 | direct LAN publishing for admin surface + root redirect | runtime-v1.1.0 |
 
 ## Open questions
 

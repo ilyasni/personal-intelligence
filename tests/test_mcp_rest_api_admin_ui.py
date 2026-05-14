@@ -191,6 +191,14 @@ def test_analytics_redirects_to_admin(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.headers["location"] == "/admin"
 
 
+def test_root_redirects_to_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.get("/", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"] == "/admin"
+
+
 def test_admin_overview_renders_dashboard(monkeypatch: pytest.MonkeyPatch) -> None:
     app, _state = _build_app(monkeypatch)
     with TestClient(app) as client:

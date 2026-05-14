@@ -619,6 +619,11 @@ async def analytics_ui_alias() -> RedirectResponse:
     return RedirectResponse(url="/admin", status_code=307)
 
 
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def admin_root_alias() -> RedirectResponse:
+    return RedirectResponse(url="/admin", status_code=307)
+
+
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)
 async def admin_overview(request: Request) -> HTMLResponse:
     overview, conversations, tasks, people, chats = await asyncio.gather(

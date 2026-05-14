@@ -75,7 +75,8 @@ Docker настроен:
 | Qdrant v1.10 | 6333 (REST), 6334 (gRPC) | Vector DB |
 | S3 cloud.ru | внешний endpoint | Object store для raw/media |
 
-Все порты слушают только на `127.0.0.1` сервера — не доступны извне напрямую.
+Data-layer порты слушают только на `127.0.0.1` сервера и не доступны извне напрямую.
+Admin surface (`mcp-rest-api`) может публиковаться отдельно через `ADMIN_BIND_HOST` и `ADMIN_PUBLISHED_PORT`.
 
 ## Обновление / деплой
 

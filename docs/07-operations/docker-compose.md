@@ -10,6 +10,7 @@
 - В текущем compose уже есть `xray`, `telegram-ingestor`, `ai-orchestrator`, `memory-projector`, `embedding-indexer`, `mcp-rest-api`, `maintenance`.
 - Transitional сервисы `entity-extractor`, `persona-builder`, `task-extractor`, `chat-summarizer` больше не входят в активный compose runtime.
 - `admin-ui`, `prometheus`, `grafana`, `loki`, `promtail` пока не подключены к runtime-compose.
+- `mcp-rest-api` публикуется через compose port mapping и может быть открыт в LAN через `ADMIN_BIND_HOST` + `ADMIN_PUBLISHED_PORT`.
 
 ## Структура
 
@@ -52,6 +53,7 @@ infra/
 - `pil-ingest` — `xray` + `telegram-ingestor`.
 
 Внешний reverse-proxy через Caddy пока не активирован в compose.
+Если нужен прямой LAN-доступ без reverse-proxy, используется publish у `mcp-rest-api`, например `192.168.31.165:80 -> 8090`.
 
 ## Healthchecks
 
