@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-grid">
+  <article class="metric-card">
+    <span>Analysis windows</span>
+    <strong>{{ overview.window_count }}</strong>
+    <small>Recent processed windows in the active lookback.</small>
+  </article>
+  <article class="metric-card">
+    <span>Avg confidence</span>
+    <strong>{{ "%.3f"|format(overview.avg_confidence) }}</strong>
+    <small>Structured analysis confidence across recent windows.</small>
+  </article>
+  <article class="metric-card">
+    <span>Avg messages</span>
+    <strong>{{ "%.2f"|format(overview.avg_message_count) }}</strong>
+    <small>Typical size of a synthesized conversation window.</small>
+  </article>
+  <article class="metric-card">
+    <span>Open tasks</span>
+    <strong>{{ overview.open_tasks }}</strong>
+    <small>Unresolved commitments currently tracked.</small>
+  </article>
+  <article class="metric-card">
+    <span>People</span>
+    <strong>{{ overview.people_count }}</strong>
+    <small>Known profiles in canonical Postgres memory.</small>
+  </article>
+  <article class="metric-card">
+    <span>Chats</span>
+    <strong>{{ overview.chat_count }}</strong>
+    <small>Chat entities currently represented in runtime memory.</small>
+  </article>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h3>Signal mix</h3>
+    <a href="/admin/conversations">See conversations</a>
+  </div>
+  <div class="signal-grid">
+    {% for signal in overview.signals %}
+    <article class="signal-card">
+      <span>{{ signal.signal_kind }}</span>
+      <strong>{{ "%.3f"|format(signal.avg_score) }}</strong>
+      <small>{{ signal.samples }} samples</small>
+    </article>
+    {% else %}
+    <p class="empty-state">No analytics signals yet.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="two-column">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Recent conversations</h3>
+      <a href="/admin/conversations">Open full table</a>
+    </div>
+    <div class="stack-list">
+      {% for item in conversations %}
+      <div class="stack-item">
+        <div class="stack-meta">
+          <span>Chat {{ item.tg_chat_id }}</span>
+          <span>{{ item.window_end|datetime }}</span>
+        </div>
+        <strong>{{ item.message_count }} messages · {{ "%.3f"|format(item.confidence) }} confidence</strong>
+        <p>{{ item.summary }}</p>
+      </div>
+      {% else %}
+      <p class="empty-state">No conversation windows yet.</p>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Open tasks</h3>
+      <a href="/admin/tasks">Open task table</a>
+    </div>
+    <div class="stack-list">
+      {% for task in tasks %}
+      <div class="stack-item">
+        <div class="stack-meta">
+          <span>{{ task.counterpart_name or "No counterpart" }}</span>
+          <span>{% if task.due_at %}{{ task.due_at|datetime }}{% else %}No due date{% endif %}</span>
+        </div>
+        <strong>{{ task.title }}</strong>
+        <p>{{ task.description or "No description yet." }}</p>
+      </div>
+      {% else %}
+      <p class="empty-state">No open tasks.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="two-column">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>People pulse</h3>
+      <a href="/admin/people">Browse people</a>
+    </div>
+    <div class="stack-list">
+      {% for person in people %}
+      <div class="stack-item">
+        <div class="stack-meta">
+          <span>{{ person.display_name }}</span>
+          <span>{{ person.last_interaction_at|datetime }}</span>
+        </div>
+        <strong>@{{ person.username or "unknown" }}</strong>
+        <p>{{ person.organizations|csvish }} · {{ person.topics|csvish }}</p>
+      </div>
+      {% else %}
+      <p class="empty-state">No people yet.</p>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Chat map</h3>
+      <a href="/admin/chats">Browse chats</a>
+    </div>
+    <div class="stack-list">
+      {% for chat in chats %}
+      <div class="stack-item">
+        <div class="stack-meta">
+          <span>{{ chat.title or ("Chat " ~ chat.tg_chat_id) }}</span>
+          <span>{{ chat.last_window_end|datetime }}</span>
+        </div>
+        <strong>{{ chat.kind }} · {{ chat.window_count }} windows</strong>
+        <p>Allowed: {{ chat.is_allowed|bool_label }} · Members: {{ chat.member_count or 0 }}</p>
+      </div>
+      {% else %}
+      <p class="empty-state">No chats yet.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+{% endblock %}

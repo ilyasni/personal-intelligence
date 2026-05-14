@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h3>Chats</h3>
+    <p class="panel-copy">{{ limit }} chats with rollout visibility into windows and allowlist state.</p>
+  </div>
+  <div class="table-shell">
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Telegram ID</th>
+          <th>Kind</th>
+          <th>Allowed</th>
+          <th>Members</th>
+          <th>Windows</th>
+          <th>Last window</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for chat in chats %}
+        <tr>
+          <td>{{ chat.title or ("Chat " ~ chat.tg_chat_id) }}</td>
+          <td>{{ chat.tg_chat_id }}</td>
+          <td>{{ chat.kind }}</td>
+          <td>{{ chat.is_allowed|bool_label }}</td>
+          <td>{{ chat.member_count or 0 }}</td>
+          <td>{{ chat.window_count }}</td>
+          <td>{{ chat.last_window_end|datetime }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="empty-cell">No chats available.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

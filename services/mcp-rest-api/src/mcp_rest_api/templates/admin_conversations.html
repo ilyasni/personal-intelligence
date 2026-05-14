@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h3>Conversation windows</h3>
+    <p class="panel-copy">{{ limit }} most recent windows with summary and analytics signals.</p>
+  </div>
+  <div class="table-shell">
+    <table>
+      <thead>
+        <tr>
+          <th>Chat</th>
+          <th>Window</th>
+          <th>Messages</th>
+          <th>Confidence</th>
+          <th>Signals</th>
+          <th>Summary</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in conversations %}
+        <tr>
+          <td>{{ item.tg_chat_id }}</td>
+          <td>{{ item.window_start|datetime }} → {{ item.window_end|datetime }}</td>
+          <td>{{ item.message_count }}</td>
+          <td>{{ "%.3f"|format(item.confidence) }}</td>
+          <td>
+            <div class="pill-row">
+              {% for signal in item.signals %}
+              <span class="pill">{{ signal.kind }} {{ "%.2f"|format(signal.score) }}</span>
+              {% else %}
+              <span class="pill muted">No signals</span>
+              {% endfor %}
+            </div>
+          </td>
+          <td>{{ item.summary }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="empty-cell">No analysis windows available.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

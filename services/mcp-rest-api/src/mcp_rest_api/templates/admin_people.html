@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h3>People</h3>
+    <p class="panel-copy">{{ limit }} most recently active profiles in canonical memory.</p>
+  </div>
+  <div class="table-shell">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Username</th>
+          <th>Organizations</th>
+          <th>Topics</th>
+          <th>Trust</th>
+          <th>Last interaction</th>
+          <th>Context</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for person in people %}
+        <tr>
+          <td>
+            <strong>{{ person.display_name }}</strong>
+            <div class="subtle">{{ person.communication_style or "No style summary yet" }}</div>
+          </td>
+          <td>@{{ person.username or "unknown" }}</td>
+          <td>{{ person.organizations|csvish }}</td>
+          <td>{{ person.topics|csvish }}</td>
+          <td>{{ "%.3f"|format(person.trust_score) }}</td>
+          <td>{{ person.last_interaction_at|datetime }}</td>
+          <td><a href="/persons/{{ person.id }}/context">JSON context</a></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="empty-cell">No people available.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

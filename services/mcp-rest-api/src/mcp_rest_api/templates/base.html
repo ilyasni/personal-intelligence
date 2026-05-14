@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PIL Admin · {{ page_title }}</title>
+    <link rel="stylesheet" href="{{ static_path }}" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">Personal Intelligence Layer</p>
+          <h1>Control Room</h1>
+          <p class="lede">Operator view for memory, analytics, and live runtime checks.</p>
+        </div>
+        <nav class="nav">
+          <a href="/admin" class="{% if current_page == 'overview' %}active{% endif %}">Overview</a>
+          <a href="/admin/conversations" class="{% if current_page == 'conversations' %}active{% endif %}">Conversations</a>
+          <a href="/admin/tasks" class="{% if current_page == 'tasks' %}active{% endif %}">Tasks</a>
+          <a href="/admin/people" class="{% if current_page == 'people' %}active{% endif %}">People</a>
+          <a href="/admin/chats" class="{% if current_page == 'chats' %}active{% endif %}">Chats</a>
+        </nav>
+        <div class="sidebar-card">
+          <p class="eyebrow">JSON APIs</p>
+          <a href="/analytics/overview">analytics/overview</a>
+          <a href="/analytics/conversations">analytics/conversations</a>
+          <a href="/tasks/open">tasks/open</a>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="page-header">
+          <div>
+            <p class="eyebrow">Admin Surface</p>
+            <h2>{{ page_title }}</h2>
+          </div>
+        </header>
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </body>
+</html>

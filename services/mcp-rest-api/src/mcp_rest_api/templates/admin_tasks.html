@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <h3>Open tasks</h3>
+    <p class="panel-copy">{{ limit }} highest-priority open tasks from canonical memory.</p>
+  </div>
+  <div class="table-shell">
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Counterpart</th>
+          <th>Chat</th>
+          <th>Priority</th>
+          <th>Confidence</th>
+          <th>Due</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in tasks %}
+        <tr>
+          <td>
+            <strong>{{ task.title }}</strong>
+            <div class="subtle">{{ task.description or "No description" }}</div>
+          </td>
+          <td>{{ task.counterpart_name or "—" }}</td>
+          <td>{{ task.tg_chat_id or "—" }}</td>
+          <td>{{ task.priority }}</td>
+          <td>{{ "%.3f"|format(task.confidence) }}</td>
+          <td>{{ task.due_at|datetime }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="empty-cell">No open tasks.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
