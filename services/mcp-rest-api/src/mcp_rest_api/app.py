@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import asyncpg
 from fastapi import FastAPI, HTTPException
@@ -14,11 +14,14 @@ from pil_contracts import STREAM_AI_REPROCESS_WINDOW, ReprocessWindowCommand
 from pil_observability import get_logger
 from pil_storage import RedisClient
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
 log = get_logger("mcp-rest-api.app")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pg_dsn = settings.postgres_dsn.replace("postgresql+asyncpg://", "postgresql://")
     db_pool = await asyncpg.create_pool(pg_dsn, min_size=1, max_size=8)
     redis = RedisClient(url=settings.redis_url, password=settings.redis_password or None)

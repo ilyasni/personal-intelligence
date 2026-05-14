@@ -61,7 +61,7 @@ def _window_key(tg_chat_id: int) -> str:
 
 
 async def _load_window_messages(redis: RedisClient, tg_chat_id: int) -> list[WindowMessagePayload]:
-    entries = await redis.r.lrange(_window_key(tg_chat_id), 0, -1)
+    entries = await redis.lrange(_window_key(tg_chat_id), 0, -1)
     return [WindowMessagePayload.model_validate_json(item) for item in entries]
 
 
@@ -71,13 +71,13 @@ async def _store_window_message(
     payload: WindowMessagePayload,
 ) -> int:
     key = _window_key(tg_chat_id)
-    await redis.r.rpush(key, payload.model_dump_json())
-    await redis.r.expire(key, max(settings.analysis_time_window_minutes * 60, 3600))
-    return int(await redis.r.llen(key))
+    await redis.rpush(key, payload.model_dump_json())
+    await redis.expire(key, max(settings.analysis_time_window_minutes * 60, 3600))
+    return await redis.llen(key)
 
 
 async def _delete_window(redis: RedisClient, tg_chat_id: int) -> None:
-    await redis.r.delete(_window_key(tg_chat_id))
+    await redis.delete(_window_key(tg_chat_id))
 
 
 async def _load_canonical_context(

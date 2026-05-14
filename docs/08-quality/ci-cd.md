@@ -3,7 +3,7 @@
 Текущий статус на 2026-05-14:
 
 - базовый workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) уже заведен;
-- A-06 больше не `TODO`: PR/push CI теперь запускает install/syntax sanity, обязательный `ruff` для canonical runtime и `pytest`;
+- A-06 больше не `TODO`: PR/push CI теперь запускает install/syntax sanity, обязательные `ruff` и `mypy` для canonical runtime и `pytest`;
 - реальный merge gate сейчас: зелёный GitHub Actions CI + ручная smoke-проверка server runtime после деплоя.
 
 Ниже описано текущее состояние и ближайшее целевое развитие CI/CD.
@@ -18,8 +18,9 @@ GitHub Actions для CI. Self-hosted runner на server runtime или выде
 2. setup-python with built-in pip cache (`actions/setup-python`)
 3. install/syntax sanity job на Python 3.12 (`pip check` + `compileall`)
 4. обязательный `ruff`-job по canonical runtime через `make lint-runtime`
-5. test matrix на Python 3.12 и 3.13
-6. upload `pytest` JUnit artifacts
+5. обязательный `mypy`-job по canonical runtime через `make typecheck-runtime`
+6. test matrix на Python 3.12 и 3.13
+7. upload `pytest` JUnit artifacts
 
 Gate: все шаги зелёные → merge разрешён.
 
@@ -36,7 +37,7 @@ Best practices, которые уже применены:
 Следующие итерации для этого же workflow:
 
 1. integration split c testcontainers
-2. вернуть `mypy` как обязательный gate после погашения текущего static-analysis debt
+2. расширить `mypy` gate с canonical runtime на transitional/runtime-adjacent пакеты после погашения оставшегося static-analysis debt
 3. coverage upload
 4. `pip-audit`
 5. schema/contract drift checks

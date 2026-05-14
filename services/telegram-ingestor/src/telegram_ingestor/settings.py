@@ -43,4 +43,4 @@ class Settings(BaseSettings):
         return f"{self.webhook_base_url}{self.webhook_path}"
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]

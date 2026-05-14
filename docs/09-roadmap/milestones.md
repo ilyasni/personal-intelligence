@@ -15,7 +15,7 @@
 | A-03 | `libs/observability` | A | DONE | claude | docs-v0.2.0 | functional, test debt remains |
 | A-04 | `libs/storage-clients` | A | DONE | claude | docs-v0.2.0 | functional, test debt remains |
 | A-05 | Compose stack | A | DONE | claude | infra-v0.1.0 | postgres / redis / neo4j / qdrant |
-| A-06 | CI workflow | A | DONE | codex | runtime-v1.0.2 | GitHub Actions PR/push CI: install/syntax sanity + canonical-runtime ruff gate + pytest matrix 3.12/3.13 + junit artifacts |
+| A-06 | CI workflow | A | DONE | codex | runtime-v1.0.4 | GitHub Actions PR/push CI: install/syntax sanity + canonical-runtime ruff/mypy gates + pytest matrix 3.12/3.13 + junit artifacts |
 | A-07 | ADR baseline | A | DRAFT | - | - | |
 | B-01 | Core migrations | B | DONE | claude | db-v0.3.0 | |
 | B-02 | Interaction / task / audit tables | B | DONE | claude | db-v0.5.0 | |
@@ -50,6 +50,7 @@
 | sprint-8 | 2026-05-14 | F-01 | server cutover verified | CRLF-safe audit scripts and idempotent orphan cleanup simplified remote ops |
 | sprint-9 | 2026-05-14 | A-06 | baseline CI activated | GitHub Actions now covers sanity checks, canonical-runtime lint, and tests before merge |
 | sprint-10 | 2026-05-14 | B-03 | deterministic fixtures online | committed seed bundle now backs tests, demos, and smoke tooling |
+| sprint-11 | 2026-05-14 | A-06 follow-up | canonical-runtime mypy gate activated | `mypy_path` + typed client wrappers removed false-positive noise from src-layout packages |
 
 ## Releases
 
@@ -68,6 +69,7 @@
 | v1.0.1 | 2026-05-14 | cutover verification + server-side audit tooling | runtime-v1.0.1 |
 | v1.0.2 | 2026-05-14 | baseline GitHub Actions CI workflow + canonical-runtime ruff gate | runtime-v1.0.2 |
 | v1.0.3 | 2026-05-14 | deterministic seed/fixtures bundle | runtime-v1.0.3 |
+| v1.0.4 | 2026-05-14 | canonical-runtime mypy gate + src-layout mypy_path baseline | runtime-v1.0.4 |
 
 ## Open questions
 

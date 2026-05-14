@@ -1,9 +1,19 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import Any, Protocol, cast
 
 import aiobotocore.session
 from botocore.config import Config as BotoConfig
+
+
+class _S3BodyReader(Protocol):
+    async def read(self) -> bytes: ...
+
+
+class _S3ClientProtocol(Protocol):
+    async def put_object(self, **kwargs: Any) -> Any: ...
+    async def get_object(self, **kwargs: Any) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -24,7 +34,7 @@ class S3Client:
         return bool(self.access_key_id and self.secret_access_key and self.bucket_raw and self.bucket_media)
 
     @asynccontextmanager
-    async def _client(self) -> AsyncGenerator[object, None]:
+    async def _client(self) -> AsyncGenerator[_S3ClientProtocol, None]:
         session = aiobotocore.session.get_session()
         async with session.create_client(
             "s3",
@@ -37,7 +47,7 @@ class S3Client:
                 s3={"addressing_style": self.addressing_style},
             ),
         ) as client:
-            yield client
+            yield cast("_S3ClientProtocol", client)
 
     async def put_raw(self, key: str, body: bytes, content_type: str = "application/json") -> str:
         full_key = f"raw/{key}"
@@ -66,4 +76,5 @@ class S3Client:
     async def get_raw(self, key: str) -> bytes:
         async with self._client() as client:
             response = await client.get_object(Bucket=self.bucket_raw, Key=key)
-            return await response["Body"].read()
+            body = cast("_S3BodyReader", response["Body"])
+            return bytes(await body.read())

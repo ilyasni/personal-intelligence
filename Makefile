@@ -5,7 +5,7 @@ CANONICAL_PY_DIRS := libs/contracts libs/llm-client libs/observability libs/stor
 	services/embedding-indexer services/mcp-rest-api services/maintenance
 
 .PHONY: help deps up down logs ps smoke smoke-wait smoke-strict cutover-audit cutover-cleanup \
-        verify lint lint-runtime fmt typecheck install install-dev pre-commit-install nuke
+        verify lint lint-runtime fmt typecheck typecheck-runtime install install-dev pre-commit-install nuke
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 help:
@@ -109,10 +109,13 @@ fmt:
 typecheck:
 	mypy libs/ services/ --config-file pyproject.toml
 
+typecheck-runtime:
+	mypy $(CANONICAL_PY_DIRS) --config-file pyproject.toml
+
 test:
 	pytest tests/ -v
 
-verify: lint typecheck test
+verify: lint-runtime typecheck-runtime test
 
 pre-commit-install:
 	pre-commit install

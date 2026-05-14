@@ -2,7 +2,7 @@
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal, cast
 
 from aiogram import Router
 from aiogram.types import BusinessConnection, BusinessMessagesDeleted, Message
@@ -18,6 +18,8 @@ from pil_storage import RedisClient, S3Client
 
 router = Router(name="business")
 log = get_logger(__name__)
+
+ChatType = Literal["private", "group", "supergroup", "channel"]
 
 
 # ── business_connection ───────────────────────────────────────────────────────
@@ -49,6 +51,8 @@ async def on_business_message(
     redis: RedisClient,
     s3: S3Client,
 ) -> None:
+    storage_key = _s3_key(message.chat.id, message.message_id, message.date)
+    raw_key: str | None = storage_key
     log.info(
         "business_message",
         chat_id=message.chat.id,
@@ -56,21 +60,16 @@ async def on_business_message(
         from_user=message.from_user.id if message.from_user else None,
     )
     # Persist the raw Telegram payload in S3 when storage is configured.
-    raw_key = _s3_key(message.chat.id, message.message_id, message.date)
     if s3.is_configured:
         try:
-            await s3.put_raw(raw_key, _serialize_message_json(message))
+            await s3.put_raw(storage_key, _serialize_message_json(message))
         except Exception:
             log.warning("s3_put_failed", key=raw_key, exc_info=True)
             raw_key = None  # Do not block the pipeline when object storage is unavailable.
     else:
         raw_key = None
 
-    chat_type = (
-        message.chat.type
-        if isinstance(message.chat.type, str)
-        else (message.chat.type.value if message.chat.type else "private")
-    )
+    chat_type = _normalize_chat_type(message.chat.type)
 
     contract = TelegramMessageEvent(
         tg_chat_id=message.chat.id,
@@ -79,7 +78,7 @@ async def on_business_message(
         tg_sender_username=message.from_user.username if message.from_user else None,
         tg_sender_name=message.from_user.full_name if message.from_user else None,
         chat_title=message.chat.title or message.chat.full_name,
-        chat_type=chat_type,  # type: ignore[arg-type]
+        chat_type=chat_type,
         text=message.text or message.caption,
         media_type=_media_type(message),
         reply_to_message_id=message.reply_to_message.message_id if message.reply_to_message else None,
@@ -101,7 +100,7 @@ async def on_edited_business_message(
     contract = TelegramMessageEditedEvent(
         tg_chat_id=message.chat.id,
         tg_message_id=message.message_id,
-        edit_date=message.edit_date,
+        edit_date=_normalize_edit_date(message.edit_date),
         new_text=message.text or message.caption,
     )
     await redis.xadd(contract.stream, {"data": contract.model_dump_json()})
@@ -143,6 +142,23 @@ def _media_type(message: Message) -> str | None:
         return "sticker"
     if message.video_note:
         return "video_note"
+    return None
+
+
+def _normalize_chat_type(value: object) -> ChatType:
+    if isinstance(value, str) and value in {"private", "group", "supergroup", "channel"}:
+        return cast("ChatType", value)
+    enum_value = getattr(value, "value", None)
+    if isinstance(enum_value, str) and enum_value in {"private", "group", "supergroup", "channel"}:
+        return cast("ChatType", enum_value)
+    return "private"
+
+
+def _normalize_edit_date(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, UTC)
     return None
 
 

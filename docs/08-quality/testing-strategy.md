@@ -63,7 +63,8 @@
 - Локально перед отправкой всё ещё ожидается `make verify`.
 - Coverage upload появится в следующей итерации CI.
 - `ruff` уже включён в обязательный GitHub gate для canonical runtime через `make lint-runtime`.
-- `mypy` пока не включён в обязательный GitHub gate из-за текущего static-analysis debt; CI вернёт его после отдельной cleanup-итерации.
+- `mypy` уже включён в обязательный GitHub gate для canonical runtime через `make typecheck-runtime`.
+- Repo-wide `lint` и `typecheck` остаются debt-tracking командами; merge gate сейчас завязан на canonical runtime через `make verify`.
 - Security — `pip-audit`, `safety`, `npm audit`, `trivy` для image — CI fail на high-severity без override.
 
 ## Data fixtures

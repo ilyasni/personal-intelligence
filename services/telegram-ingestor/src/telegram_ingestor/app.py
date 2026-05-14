@@ -45,7 +45,7 @@ async def create_app() -> tuple[FastAPI, Bot, Dispatcher]:
     app = FastAPI(title="PIL telegram-ingestor", docs_url=None)
 
     @app.get("/healthz")
-    async def healthz() -> dict:
+    async def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
     return app, bot, dp

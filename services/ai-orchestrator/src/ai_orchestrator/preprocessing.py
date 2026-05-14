@@ -7,8 +7,13 @@ import statistics
 import uuid
 from collections import Counter
 from datetime import datetime
+from typing import Literal, cast
 
 from pil_contracts import MessageFeatureSet, WindowMessagePayload
+
+ChatType = Literal["private", "group", "supergroup", "channel"]
+WindowKind = Literal["single", "rolling", "time_window"]
+SentimentHint = Literal["positive", "negative", "neutral", "mixed"]
 
 _HANDLE_RE = re.compile(r"(?<!\w)@([A-Za-z0-9_]{3,32})")
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
@@ -63,8 +68,10 @@ def compute_message_features(
     chat_type: str,
     window_kind: str = "rolling",
 ) -> MessageFeatureSet:
+    normalized_chat_type = _normalize_chat_type(chat_type)
+    normalized_window_kind = _normalize_window_kind(window_kind)
     if not messages:
-        return MessageFeatureSet(chat_type=chat_type, window_kind=window_kind)
+        return MessageFeatureSet(chat_type=normalized_chat_type, window_kind=normalized_window_kind)
 
     participant_ids = [msg.tg_sender_id for msg in messages if msg.tg_sender_id is not None]
     unique_participants = sorted(set(participant_ids))
@@ -119,7 +126,7 @@ def compute_message_features(
         median_latency = round(float(median_latency), 3)
 
     return MessageFeatureSet(
-        chat_type=chat_type,  # type: ignore[arg-type]
+        chat_type=normalized_chat_type,
         message_count=len(messages),
         participant_count=len(unique_participants),
         participant_tg_ids=unique_participants,
@@ -134,7 +141,7 @@ def compute_message_features(
         forwarded_count=forwarded_count,
         reply_count=reply_count,
         median_response_latency_sec=median_latency,
-        window_kind=window_kind,  # type: ignore[arg-type]
+        window_kind=normalized_window_kind,
     )
 
 
@@ -179,7 +186,19 @@ def _compact_phone(value: str) -> str:
     return re.sub(r"\D+", "", value)
 
 
-def _sentiment_hint(*, positive_hits: int, negative_hits: int) -> str:
+def _normalize_chat_type(value: str) -> ChatType:
+    if value in {"private", "group", "supergroup", "channel"}:
+        return cast("ChatType", value)
+    return "private"
+
+
+def _normalize_window_kind(value: str) -> WindowKind:
+    if value in {"single", "rolling", "time_window"}:
+        return cast("WindowKind", value)
+    return "rolling"
+
+
+def _sentiment_hint(*, positive_hits: int, negative_hits: int) -> SentimentHint:
     if positive_hits and negative_hits:
         return "mixed"
     if negative_hits:

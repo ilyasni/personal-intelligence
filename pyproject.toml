@@ -31,6 +31,20 @@ strict = true
 ignore_missing_imports = true
 namespace_packages = true
 explicit_package_bases = true
+mypy_path = [
+    "libs/contracts/src",
+    "libs/llm-client/src",
+    "libs/observability/src",
+    "libs/storage-clients/src",
+    "services/telegram-ingestor/src",
+    "services/ai-orchestrator/src",
+    "services/memory-projector/src",
+    "services/embedding-indexer/src",
+    "services/mcp-rest-api/src",
+    "services/maintenance/src",
+]
+show_error_codes = true
+warn_unused_configs = true
 exclude = ["tests/", "scripts/"]
 
 [tool.pytest.ini_options]

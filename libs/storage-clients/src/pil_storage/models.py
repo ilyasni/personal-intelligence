@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import (
     ARRAY,
@@ -44,7 +45,7 @@ class Connection(Base):
     tg_user_id: Mapped[int | None] = mapped_column(BigInteger)
     display_name: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(TZ, nullable=False, default=_now)
     updated_at: Mapped[datetime] = mapped_column(TZ, nullable=False, default=_now, onupdate=_now)
 
@@ -65,7 +66,7 @@ class Chat(Base):
     title: Mapped[str | None] = mapped_column(Text)
     is_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     member_count: Mapped[int | None] = mapped_column(Integer)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(TZ, nullable=False, default=_now)
     updated_at: Mapped[datetime] = mapped_column(TZ, nullable=False, default=_now, onupdate=_now)
 
@@ -149,5 +150,5 @@ class Setting(Base):
     __tablename__ = "setting"
 
     key: Mapped[str] = mapped_column(Text, primary_key=True)
-    value: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TZ, nullable=False, default=_now, onupdate=_now)
