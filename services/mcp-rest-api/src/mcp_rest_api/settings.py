@@ -1,0 +1,25 @@
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    postgres_dsn: str = "postgresql://pil:pil@localhost:5432/pil"
+    redis_url: str = "redis://localhost:6379/0"
+    redis_password: str = ""
+
+    api_host: str = "0.0.0.0"
+    api_port: int = 8090
+    log_level: str = "INFO"
+
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str = ""
+    qdrant_alias_name: str = "pil_memory_active"
+
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = ""
+    neo4j_database: str = "neo4j"
+
+    model_config = {"env_file": ".env", "extra": "ignore"}
+
+
+settings = Settings()

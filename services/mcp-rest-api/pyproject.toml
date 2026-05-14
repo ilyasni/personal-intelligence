@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-rest-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "pil-contracts",
+    "pil-observability",
+    "pil-storage",
+    "asyncpg>=0.29",
+    "fastapi>=0.110",
+    "httpx>=0.28",
+    "neo4j>=5.28",
+    "pydantic-settings>=2.0",
+    "python-jose[cryptography]>=3.3",
+    "qdrant-client>=1.12",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_rest_api"]

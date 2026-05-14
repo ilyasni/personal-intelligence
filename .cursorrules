@@ -1,0 +1,71 @@
+# Cursor rules — Personal Intelligence Layer
+
+Документация общая для трёх агентов (Claude Code, Codex, Cursor) и лежит в `docs/`.
+Зеркальные точки входа: `CLAUDE.md` (Claude Code) и `AGENTS.md` (Codex). Этот файл — твой.
+
+## Миссия проекта
+
+Personal Intelligence Layer (PIL) — личный второй мозг над Telegram. Бот, привязанный к профилю через Chat Automation или Telethon userbot, превращает поток сообщений в структурированную память (персоны, связи, задачи, темы, обещания) и отдаёт её внешним LLM через MCP/REST. Self-host, privacy by default.
+
+Подробнее: `docs/00-overview/big-picture.md`, `docs/02-architecture/system-overview.md`.
+
+## Что особенно про Cursor
+
+Cursor силён в:
+
+- интерактивной правке кода в редакторе с моментальным фидбэком;
+- работе над UI (React Admin), где важен превью + DOM-инспекция;
+- быстрых точечных изменениях с парной валидацией от пользователя;
+- объяснении конкретного куска кода прямо во вкладке.
+
+Слабее всего в: длинных batch-задачах (→ Codex) и сквозном планировании по нескольким сервисам (→ Claude Code).
+
+## Актуальный контекст среды
+
+- На 2026-05-12 в репозитории ещё нет `apps/admin-ui/`.
+- Server-side runtime в `~/pil` тоже пока не содержит UI-приложения и git-метаданных.
+- Поэтому эта точка входа сейчас в основном полезна для UI-spec, UX-flow, точечных правок docs и подготовки будущего Admin UI, а не для уже существующего frontend-кода.
+
+## Стартовые шаги новой сессии
+
+1. Прочитать `.cursorrules` (этот файл).
+2. Прочитать `docs/11-agents/agent-architecture.md` — общая модель.
+3. Прочитать `docs/11-agents/shared-conventions.md` — стиль, контракты, логи.
+4. Прочитать `docs/11-agents/handoff-protocol.md` — как принять/передать сессию.
+5. Сверить статус: `docs/09-roadmap/milestones.md`.
+
+## Конвенции (минимум)
+
+Полный список — `docs/11-agents/shared-conventions.md`. Самое важное для интерактивной работы:
+
+1. Предпочтительный workflow — через PR. Если работа идёт в server runtime без git, handoff и апдейт roadmap обязательны.
+2. Каждый PR проходит `make verify` локально перед открытием.
+3. Пока `apps/admin-ui/` не существует, любые UI-изменения считаются изменениями в spec/docs, а не в runtime-коде.
+4. Когда `apps/admin-ui/` появится, UI компоненты живут в `apps/admin-ui/src/components/`, хуки — в `apps/admin-ui/src/hooks/`, бизнес-логика — в `apps/admin-ui/src/lib/` или backend.
+5. Будущий UI стек: Tailwind без inline-стилей, API-вызовы через общий client layer, i18n-ключи вместо hardcode-строк.
+6. Аксессибилити — WCAG 2.1 AA минимум.
+
+## Куда смотреть по типу задачи
+
+| Тип задачи | Сначала прочитать |
+|---|---|
+| Новый экран / компонент Admin UI | `docs/06-admin-ui/ui-spec.md`, `docs/06-admin-ui/ux-flows.md` |
+| Новый MCP/REST endpoint | `docs/04-api/mcp-api.md`, `docs/04-api/rest-api.md` |
+| Изменение Tailwind/тема | `docs/06-admin-ui/ui-spec.md` (раздел design tokens) |
+| Интеграция со схемой данных | `docs/03-data-model/` |
+
+## Часто используемые команды
+
+```bash
+# Для текущего состояния репозитория
+make verify
+
+# Проверить compose-стек, к которому UI будет подключаться
+make ps
+make logs
+make smoke
+```
+
+## Завершение сессии
+
+В описание PR/коммита добавь handoff-блок (`docs/11-agents/handoff-protocol.md`). Если работа упирается в backend-изменение — пометь как «нужно Codex/Claude Code» и закрепи ссылку на черновик.

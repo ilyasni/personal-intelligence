@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-orchestrator"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "pil-contracts",
+    "pil-observability",
+    "pil-storage",
+    "asyncpg>=0.29",
+    "pydantic-settings>=2.0",
+    "langgraph>=1.0.0",
+    "openai>=1.35",
+    "httpx>=0.27",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_orchestrator"]

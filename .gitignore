@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Secrets & env
+.env
+*.session
+secrets/
+*.pem
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+infra/compose/.env
+infra/compose/.env.bak*
+infra/compose/secrets/
+!infra/compose/secrets/.gitkeep

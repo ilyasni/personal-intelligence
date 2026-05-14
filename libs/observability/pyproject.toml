@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pil-observability"
+version = "0.1.0"
+description = "PIL structured logging (structlog) + Prometheus metrics"
+requires-python = ">=3.12"
+dependencies = [
+    "structlog>=24.0",
+    "prometheus-client>=0.20",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pil_observability"]

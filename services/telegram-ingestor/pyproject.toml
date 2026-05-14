@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "telegram-ingestor"
+version = "0.1.0"
+description = "PIL Telegram ingestion service — Business Bot webhook (aiogram)"
+requires-python = ">=3.12"
+dependencies = [
+    "pil-contracts",
+    "pil-observability",
+    "pil-storage",
+    "aiogram>=3.26",
+    "aiohttp-socks>=0.8",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+    "pydantic-settings>=2.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/telegram_ingestor"]

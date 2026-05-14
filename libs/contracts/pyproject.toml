@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pil-contracts"
+version = "0.1.0"
+description = "PIL shared event & command contracts (pydantic models)"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7",
+    "python-ulid>=2.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pil_contracts"]

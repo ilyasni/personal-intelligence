@@ -1,0 +1,41 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["services", "libs"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "N",        # pep8-naming
+    "UP",       # pyupgrade
+    "B",        # flake8-bugbear
+    "C4",       # flake8-comprehensions
+    "SIM",      # flake8-simplify
+    "TCH",      # flake8-type-checking
+    "RUF",      # ruff-specific
+]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.ruff.lint.isort]
+known-first-party = ["pil_contracts", "pil_observability", "pil_storage", "pil_llm"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+namespace_packages = true
+explicit_package_bases = true
+exclude = ["tests/", "scripts/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

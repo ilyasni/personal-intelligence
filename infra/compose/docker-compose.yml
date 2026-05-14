@@ -1,0 +1,332 @@
+name: pil
+
+networks:
+  pil-data:
+    driver: bridge
+  pil-bus:
+    driver: bridge
+  pil-ingest:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  neo4j-data:
+  neo4j-logs:
+  qdrant-data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    user: postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pil}
+      POSTGRES_USER: ${POSTGRES_USER:-pil}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      - pil-data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pil} -d ${POSTGRES_DB:-pil}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --loglevel notice
+      --save 60 1000
+      --maxmemory 200mb
+      --maxmemory-policy allkeys-lru
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    expose:
+      - "6379"
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - pil-bus
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  neo4j:
+    image: neo4j:5-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+      NEO4J_db_transaction_timeout: 60s
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    expose:
+      - "7474"
+      - "7687"
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    networks:
+      - pil-data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  qdrant:
+    image: qdrant/qdrant:v1.18
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+      QDRANT__LOG_LEVEL: INFO
+      QDRANT__STORAGE__PERFORMANCE__MAX_OPTIMIZATION_THREADS: "2"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    expose:
+      - "6333"
+      - "6334"
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    networks:
+      - pil-data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  xray:
+    build:
+      context: ../..
+      dockerfile: services/xray/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ../../services/xray/run-xray.sh:/etc/xray/run-xray.sh:ro
+    environment:
+      XRAY_VLESS_ADDRESS: ${XRAY_VLESS_ADDRESS}
+      XRAY_VLESS_PORT: ${XRAY_VLESS_PORT:-443}
+      XRAY_VLESS_ID: ${XRAY_VLESS_ID}
+      XRAY_VLESS_FLOW: ${XRAY_VLESS_FLOW:-xtls-rprx-vision}
+      XRAY_REALITY_SNI: ${XRAY_REALITY_SNI}
+      XRAY_REALITY_FP: ${XRAY_REALITY_FP:-chrome}
+      XRAY_REALITY_PBK: ${XRAY_REALITY_PBK}
+      XRAY_REALITY_SID: ${XRAY_REALITY_SID}
+      XRAY_SOCKS_PORT: ${XRAY_SOCKS_PORT:-10808}
+      XRAY_HTTP_PORT: ${XRAY_HTTP_PORT:-8080}
+      XRAY_LOG_LEVEL: ${XRAY_LOG_LEVEL:-warning}
+    expose:
+      - "10808"
+      - "8080"
+    networks:
+      - pil-ingest
+
+  telegram-ingestor:
+    build:
+      context: ../..
+      dockerfile: services/telegram-ingestor/Dockerfile
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-https://s3.cloud.ru}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_REGION: ${S3_REGION:-ru-central-1}
+      S3_BUCKET_RAW: ${S3_BUCKET_RAW:-pil-raw}
+      S3_BUCKET_MEDIA: ${S3_BUCKET_MEDIA:-pil-raw-media}
+      POSTGRES_DSN: postgresql+asyncpg://${POSTGRES_USER:-pil}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pil}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TG_PROXY_URL: ${TG_PROXY_URL:-http://xray:8080}
+      TG_API_TIMEOUT_SECONDS: ${TG_API_TIMEOUT_SECONDS:-120}
+    expose:
+      - "8080"
+    networks:
+      - pil-ingest
+      - pil-bus
+      - pil-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      xray:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; import sys; data=urllib.request.urlopen('http://localhost:8080/healthz', timeout=3).read().decode(); sys.exit(0 if 'ok' in data else 1)\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      # delete_webhook + первый запрос к api.telegram.org через xray часто >20 с
+      start_period: 120s
+
+  ai-orchestrator:
+    build:
+      context: ../..
+      dockerfile: services/ai-orchestrator/Dockerfile
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      POSTGRES_DSN: postgresql+asyncpg://${POSTGRES_USER:-pil}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pil}
+      ANALYSIS_WINDOW_SIZE: ${ANALYSIS_WINDOW_SIZE:-20}
+      ANALYSIS_TIME_WINDOW_MINUTES: ${ANALYSIS_TIME_WINDOW_MINUTES:-60}
+      ANALYSIS_LLM_MODE: ${ANALYSIS_LLM_MODE:-hybrid}
+      WORMSOFT_API_BASE: ${WORMSOFT_API_BASE:-https://ai.wormsoft.ru/api/gpt}
+      WORMSOFT_API_KEY: ${WORMSOFT_API_KEY:-}
+      WORMSOFT_MODEL_DEFAULT: ${WORMSOFT_MODEL_DEFAULT:-wormsoft/agent/medium}
+      WORMSOFT_MAX_SIMULTANEOUS_REQUESTS: ${WORMSOFT_MAX_SIMULTANEOUS_REQUESTS:-1}
+      WORMSOFT_MIN_REQUEST_INTERVAL_MS: ${WORMSOFT_MIN_REQUEST_INTERVAL_MS:-250}
+      WORMSOFT_MAX_RETRIES: ${WORMSOFT_MAX_RETRIES:-2}
+      POLZA_API_BASE: ${POLZA_API_BASE:-https://polza.ai/api/v1}
+      POLZA_API_KEY: ${POLZA_API_KEY:-}
+      POLZA_MODEL_DEFAULT: ${POLZA_MODEL_DEFAULT:-deepseek/deepseek-v3.2}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - pil-bus
+      - pil-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  memory-projector:
+    build:
+      context: ../..
+      dockerfile: services/memory-projector/Dockerfile
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      POSTGRES_DSN: postgresql+asyncpg://${POSTGRES_USER:-pil}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pil}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_DATABASE: neo4j
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-https://s3.cloud.ru}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_REGION: ${S3_REGION:-ru-central-1}
+      S3_BUCKET_RAW: ${S3_BUCKET_RAW:-pil-raw}
+      S3_BUCKET_MEDIA: ${S3_BUCKET_MEDIA:-pil-raw-media}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-wormsoft}
+      EMBEDDING_MODEL: ${WORMSOFT_EMBEDDING_MODEL:-qwen/qwen3-embedding:8b}
+      EMBEDDING_ALIAS: ${QDRANT_ALIAS_NAME:-pil_memory_active}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - pil-bus
+      - pil-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+
+  embedding-indexer:
+    build:
+      context: ../..
+      dockerfile: services/embedding-indexer/Dockerfile
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      QDRANT_ALIAS_NAME: ${QDRANT_ALIAS_NAME:-pil_memory_active}
+      WORMSOFT_API_BASE: ${WORMSOFT_API_BASE:-https://ai.wormsoft.ru/api/gpt}
+      WORMSOFT_API_KEY: ${WORMSOFT_API_KEY:-}
+      WORMSOFT_EMBEDDING_MODEL: ${WORMSOFT_EMBEDDING_MODEL:-qwen/qwen3-embedding:8b}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - pil-bus
+      - pil-data
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  maintenance:
+    build:
+      context: ../..
+      dockerfile: services/maintenance/Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTGRES_DSN: postgresql+asyncpg://${POSTGRES_USER:-pil}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pil}
+      MAINTENANCE_INTERVAL_HOURS: ${MAINTENANCE_INTERVAL_HOURS:-24}
+      PARTITION_MONTHS_AHEAD: ${PARTITION_MONTHS_AHEAD:-3}
+      PROCESSED_EVENT_RETENTION_DAYS: ${PROCESSED_EVENT_RETENTION_DAYS:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - pil-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mcp-rest-api:
+    build:
+      context: ../..
+      dockerfile: services/mcp-rest-api/Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTGRES_DSN: postgresql+asyncpg://${POSTGRES_USER:-pil}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pil}
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      QDRANT_ALIAS_NAME: ${QDRANT_ALIAS_NAME:-pil_memory_active}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_DATABASE: neo4j
+      API_PORT: ${API_PORT:-8090}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    expose:
+      - "8090"
+    ports:
+      - "127.0.0.1:8090:8090"
+    networks:
+      - pil-bus
+      - pil-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; import sys; data=urllib.request.urlopen('http://localhost:8090/healthz', timeout=3).read().decode(); sys.exit(0 if 'ok' in data else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

@@ -1,0 +1,3 @@
+pil.produman.studio {
+    reverse_proxy telegram-ingestor:8080
+}
