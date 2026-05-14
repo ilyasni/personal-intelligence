@@ -17,6 +17,7 @@
           <th>Members</th>
           <th>Windows</th>
           <th>Last window</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -29,10 +30,21 @@
           <td>{{ chat.member_count or 0 }}</td>
           <td>{{ chat.window_count }}</td>
           <td>{{ chat.last_window_end|datetime }}</td>
+          <td>
+            <div class="action-row">
+              <a class="button ghost" href="/admin/chats/{{ chat.id }}">Inspect</a>
+              <form method="post" action="/admin/chats/{{ chat.id }}/allowlist" class="inline-form">
+                <input type="hidden" name="redirect_to" value="/admin/chats" />
+                <button type="submit" class="button {% if chat.is_allowed %}warn{% else %}success{% endif %}">
+                  {% if chat.is_allowed %}Disable{% else %}Allow{% endif %}
+                </button>
+              </form>
+            </div>
+          </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="empty-cell">No chats available.</td>
+          <td colspan="8" class="empty-cell">No chats available.</td>
         </tr>
         {% endfor %}
       </tbody>

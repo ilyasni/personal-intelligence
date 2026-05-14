@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel detail-hero">
+  <div class="detail-head">
+    <div>
+      <p class="eyebrow">Chat Detail</p>
+      <h3>{{ detail.chat.title or ("Chat " ~ detail.chat.tg_chat_id) }}</h3>
+      <p class="panel-copy">{{ detail.chat.kind }} · Last window {{ detail.chat.last_window_end|datetime }}</p>
+    </div>
+    <form method="post" action="/admin/chats/{{ detail.chat.id }}/allowlist" class="inline-form">
+      <input type="hidden" name="redirect_to" value="/admin/chats/{{ detail.chat.id }}" />
+      <button type="submit" class="button {% if detail.chat.is_allowed %}warn{% else %}success{% endif %}">
+        {% if detail.chat.is_allowed %}Disable allowlist{% else %}Allow chat{% endif %}
+      </button>
+    </form>
+  </div>
+  <div class="metric-inline">
+    <span>Telegram ID: {{ detail.chat.tg_chat_id }}</span>
+    <span>Members: {{ detail.chat.member_count or 0 }}</span>
+    <span>Windows: {{ detail.chat.window_count }}</span>
+    <span>Allowed: {{ detail.chat.is_allowed|bool_label }}</span>
+  </div>
+</section>
+
+<section class="two-column">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Recent windows</h3>
+    </div>
+    <div class="stack-list">
+      {% for window in detail.windows %}
+      <div class="stack-item">
+        <div class="stack-meta">
+          <span>{{ window.window_end|datetime }}</span>
+          <span>{{ "%.3f"|format(window.confidence) }}</span>
+        </div>
+        <strong>{{ window.summary }}</strong>
+        <p><a href="/admin/conversations/{{ window.id }}">Open window</a></p>
+      </div>
+      {% else %}
+      <p class="empty-state">No windows captured for this chat.</p>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Tasks in this chat</h3>
+    </div>
+    <div class="stack-list">
+      {% for task in detail.tasks %}
+      <div class="stack-item">
+        <div class="stack-meta">
+          <span>{{ task.status }}</span>
+          <span>{{ task.due_at|datetime }}</span>
+        </div>
+        <strong>{{ task.title }}</strong>
+        <p>Priority {{ task.priority }} · {{ "%.3f"|format(task.confidence) }} confidence</p>
+      </div>
+      {% else %}
+      <p class="empty-state">No tasks linked to this chat.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h3>Metadata</h3>
+  </div>
+  <pre class="code-block">{{ detail.chat.metadata|prettyjson }}</pre>
+</section>
+{% endblock %}

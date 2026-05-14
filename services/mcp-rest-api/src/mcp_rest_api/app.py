@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import asyncpg
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -49,9 +50,30 @@ def _bool_label(value: bool) -> str:
     return "yes" if value else "no"
 
 
+def _pretty_json(value: Any) -> str:
+    if value is None:
+        return "{}"
+    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return [value] if value else []
+        value = decoded
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str) and item]
+    return []
+
+
 templates.env.filters["datetime"] = _format_datetime
 templates.env.filters["csvish"] = _join_values
 templates.env.filters["bool_label"] = _bool_label
+templates.env.filters["prettyjson"] = _pretty_json
 
 
 @asynccontextmanager
@@ -194,6 +216,15 @@ async def get_conversation_data(app: FastAPI, limit: int = 20) -> list[dict[str,
     for row in rows:
         item = dict(row)
         item["message_count"] = int(item["message_count"] or 0)
+        raw_signals = item.get("signals")
+        if isinstance(raw_signals, str):
+            try:
+                raw_signals = json.loads(raw_signals)
+            except json.JSONDecodeError:
+                raw_signals = []
+        if not isinstance(raw_signals, list):
+            raw_signals = []
+        item["signals"] = [signal for signal in raw_signals if isinstance(signal, dict)]
         items.append(item)
     return items
 
@@ -248,6 +279,179 @@ async def get_chat_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+async def get_conversation_detail_data(app: FastAPI, window_id: str) -> dict[str, Any]:
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT
+                aw.id,
+                aw.chat_id,
+                aw.tg_chat_id,
+                aw.chat_type,
+                aw.window_start,
+                aw.window_end,
+                aw.summary,
+                aw.confidence::float AS confidence,
+                aw.source_message_ids,
+                aw.participant_tg_ids,
+                aw.messages,
+                aw.features,
+                aw.analysis_payload,
+                c.title AS chat_title,
+                c.is_allowed
+            FROM analysis_window aw
+            LEFT JOIN chat c ON c.id = aw.chat_id
+            WHERE aw.id = $1::uuid
+            """,
+            window_id,
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail="window_not_found")
+    item = dict(row)
+    messages = item.get("messages")
+    if isinstance(messages, str):
+        try:
+            messages = json.loads(messages)
+        except json.JSONDecodeError:
+            messages = []
+    item["messages"] = messages if isinstance(messages, list) else []
+
+    features = item.get("features")
+    if isinstance(features, str):
+        try:
+            features = json.loads(features)
+        except json.JSONDecodeError:
+            features = {}
+    item["features"] = features if isinstance(features, dict) else {}
+
+    analysis_payload = item.get("analysis_payload") or {}
+    if isinstance(analysis_payload, str):
+        try:
+            analysis_payload = json.loads(analysis_payload)
+        except json.JSONDecodeError:
+            analysis_payload = {}
+    if not isinstance(analysis_payload, dict):
+        analysis_payload = {}
+    item["claims"] = analysis_payload.get("claims", [])
+    item["tasks"] = analysis_payload.get("tasks", [])
+    item["analytics_signals"] = analysis_payload.get("analytics_signals", [])
+    return item
+
+
+async def get_person_detail_data(app: FastAPI, person_id: str) -> dict[str, Any]:
+    data = await get_person_context_data(app, person_id)
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        task_rows = await conn.fetch(
+            """
+            SELECT
+                id,
+                title,
+                description,
+                status,
+                priority,
+                confidence::float AS confidence,
+                due_at
+            FROM task
+            WHERE owner_person_id = $1::uuid OR counterpart_person_id = $1::uuid
+            ORDER BY created_at DESC
+            LIMIT 10
+            """,
+            person_id,
+        )
+    data["tasks"] = [dict(row) for row in task_rows]
+    return data
+
+
+async def get_chat_detail_data(app: FastAPI, chat_id: str) -> dict[str, Any]:
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        chat = await conn.fetchrow(
+            """
+            SELECT
+                c.id,
+                c.tg_chat_id,
+                c.kind,
+                c.title,
+                c.is_allowed,
+                c.member_count,
+                c.metadata,
+                count(aw.id)::int AS window_count,
+                max(aw.window_end) AS last_window_end
+            FROM chat c
+            LEFT JOIN analysis_window aw ON aw.chat_id = c.id
+            WHERE c.id = $1::uuid
+            GROUP BY c.id
+            """,
+            chat_id,
+        )
+        if chat is None:
+            raise HTTPException(status_code=404, detail="chat_not_found")
+        windows = await conn.fetch(
+            """
+            SELECT id, window_start, window_end, summary, confidence::float AS confidence
+            FROM analysis_window
+            WHERE chat_id = $1::uuid
+            ORDER BY window_end DESC
+            LIMIT 12
+            """,
+            chat_id,
+        )
+        tasks = await conn.fetch(
+            """
+            SELECT id, title, status, priority, confidence::float AS confidence, due_at
+            FROM task
+            WHERE chat_id = $1::uuid
+            ORDER BY created_at DESC
+            LIMIT 12
+            """,
+            chat_id,
+        )
+    return {
+        "chat": dict(chat),
+        "windows": [dict(row) for row in windows],
+        "tasks": [dict(row) for row in tasks],
+    }
+
+
+async def update_task_status(app: FastAPI, task_id: str, *, status: str) -> None:
+    if status not in {"open", "done", "dropped"}:
+        raise HTTPException(status_code=400, detail="invalid_task_status")
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            UPDATE task
+            SET status = $2,
+                resolved_at = CASE WHEN $2 = 'done' THEN now() ELSE NULL END,
+                updated_at = now()
+            WHERE id = $1::uuid
+            """,
+            task_id,
+            status,
+        )
+    if result.endswith("0"):
+        raise HTTPException(status_code=404, detail="task_not_found")
+
+
+async def set_chat_allowlist(app: FastAPI, chat_id: str, *, is_allowed: bool) -> None:
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            UPDATE chat
+            SET is_allowed = $2,
+                updated_at = now()
+            WHERE id = $1::uuid
+            """,
+            chat_id,
+            is_allowed,
+        )
+    if result.endswith("0"):
+        raise HTTPException(status_code=404, detail="chat_not_found")
+
+
 async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any]:
     pool: asyncpg.Pool = app.state.db_pool
     qdrant: AsyncQdrantClient = app.state.qdrant
@@ -265,21 +469,22 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
         if person is None:
             raise HTTPException(status_code=404, detail="person_not_found")
 
-        windows = await conn.fetch(
-            """
-            SELECT aw.id, aw.summary, aw.window_end, aw.analysis_payload
-            FROM analysis_window aw
-            WHERE EXISTS (
-                SELECT 1
-                FROM unnest(aw.participant_tg_ids) AS participant_tg_id
-                WHERE participant_tg_id = $2
+        windows: list[asyncpg.Record] = []
+        if person["tg_user_id"] is not None:
+            windows = await conn.fetch(
+                """
+                SELECT aw.id, aw.summary, aw.window_end, aw.analysis_payload
+                FROM analysis_window aw
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM unnest(aw.participant_tg_ids) AS participant_tg_id
+                    WHERE participant_tg_id = $1::bigint
+                )
+                ORDER BY aw.window_end DESC
+                LIMIT 5
+                """,
+                person["tg_user_id"],
             )
-            ORDER BY aw.window_end DESC
-            LIMIT 5
-            """,
-            person_id,
-            person["tg_user_id"],
-        )
 
     semantic_hits: list[dict[str, Any]] = []
     try:
@@ -303,22 +508,29 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
 
     graph_summary: list[dict[str, Any]] = []
     if neo4j_driver is not None:
-        async with neo4j_driver.session(database=settings.neo4j_database) as session:
-            records = await session.execute_read(
-                lambda tx: tx.run(
-                    """
-                    MATCH (p:Person {id: $person_id})-[r:COMMUNICATED_WITH]-(other:Person)
-                    RETURN other.id AS person_id, coalesce(r.weight, 0) AS weight, r.last_window_id AS last_window_id
-                    ORDER BY weight DESC
-                    LIMIT 5
-                    """,
-                    person_id=person_id,
-                ).data()
+        async def read_graph_neighbors(tx: Any) -> list[dict[str, Any]]:
+            result = await tx.run(
+                """
+                MATCH (p:Person {id: $person_id})-[r:COMMUNICATED_WITH]-(other:Person)
+                RETURN other.id AS person_id, coalesce(r.weight, 0) AS weight, r.last_window_id AS last_window_id
+                ORDER BY weight DESC
+                LIMIT 5
+                """,
+                person_id=person_id,
             )
+            raw_records = cast("list[dict[str, Any]]", await result.data())
+            return raw_records
+
+        async with neo4j_driver.session(database=settings.neo4j_database) as session:
+            records = await session.execute_read(read_graph_neighbors)
             graph_summary = [dict(record) for record in records]
 
+    person_payload = dict(person)
+    person_payload["topics"] = _normalize_string_list(person_payload.get("topics"))
+    person_payload["organizations"] = _normalize_string_list(person_payload.get("organizations"))
+
     return {
-        "person": dict(person),
+        "person": person_payload,
         "recent_windows": [dict(row) for row in windows],
         "semantic_memory": semantic_hits,
         "graph_neighbors": graph_summary,
@@ -403,6 +615,29 @@ async def admin_conversations(request: Request, limit: int = 25) -> HTMLResponse
     )
 
 
+@router.get("/admin/conversations/{window_id}", response_class=HTMLResponse, include_in_schema=False)
+async def admin_conversation_detail(request: Request, window_id: str) -> HTMLResponse:
+    detail = await get_conversation_detail_data(request.app, window_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_conversation_detail.html",
+        context=_template_context(
+            request,
+            page_title="Conversation Detail",
+            current_page="conversations",
+            detail=detail,
+        ),
+    )
+
+
+@router.post("/admin/conversations/{window_id}/reprocess", include_in_schema=False)
+async def admin_reprocess_window(request: Request, window_id: str) -> RedirectResponse:
+    redis: RedisClient = request.app.state.redis
+    command = ReprocessWindowCommand(window_id=window_id)
+    await redis.xadd(STREAM_AI_REPROCESS_WINDOW, {"data": command.model_dump_json()})
+    return RedirectResponse(url=f"/admin/conversations/{window_id}?queued=1", status_code=303)
+
+
 @router.get("/admin/tasks", response_class=HTMLResponse, include_in_schema=False)
 async def admin_tasks(request: Request, limit: int = 50) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -416,6 +651,17 @@ async def admin_tasks(request: Request, limit: int = 50) -> HTMLResponse:
             limit=limit,
         ),
     )
+
+
+@router.post("/admin/tasks/{task_id}/status", include_in_schema=False)
+async def admin_task_status(
+    request: Request,
+    task_id: str,
+    status: Annotated[str, Form()],
+    redirect_to: Annotated[str, Form()] = "/admin/tasks",
+) -> RedirectResponse:
+    await update_task_status(request.app, task_id, status=status)
+    return RedirectResponse(url=redirect_to, status_code=303)
 
 
 @router.get("/admin/people", response_class=HTMLResponse, include_in_schema=False)
@@ -433,6 +679,21 @@ async def admin_people(request: Request, limit: int = 50) -> HTMLResponse:
     )
 
 
+@router.get("/admin/people/{person_id}", response_class=HTMLResponse, include_in_schema=False)
+async def admin_person_detail(request: Request, person_id: str) -> HTMLResponse:
+    detail = await get_person_detail_data(request.app, person_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_person_detail.html",
+        context=_template_context(
+            request,
+            page_title="Person Detail",
+            current_page="people",
+            detail=detail,
+        ),
+    )
+
+
 @router.get("/admin/chats", response_class=HTMLResponse, include_in_schema=False)
 async def admin_chats(request: Request, limit: int = 50) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -446,6 +707,33 @@ async def admin_chats(request: Request, limit: int = 50) -> HTMLResponse:
             limit=limit,
         ),
     )
+
+
+@router.get("/admin/chats/{chat_id}", response_class=HTMLResponse, include_in_schema=False)
+async def admin_chat_detail(request: Request, chat_id: str) -> HTMLResponse:
+    detail = await get_chat_detail_data(request.app, chat_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_chat_detail.html",
+        context=_template_context(
+            request,
+            page_title="Chat Detail",
+            current_page="chats",
+            detail=detail,
+        ),
+    )
+
+
+@router.post("/admin/chats/{chat_id}/allowlist", include_in_schema=False)
+async def admin_chat_allowlist(
+    request: Request,
+    chat_id: str,
+    redirect_to: Annotated[str, Form()] = "/admin/chats",
+) -> RedirectResponse:
+    detail = await get_chat_detail_data(request.app, chat_id)
+    current = bool(detail["chat"]["is_allowed"])
+    await set_chat_allowlist(request.app, chat_id, is_allowed=not current)
+    return RedirectResponse(url=redirect_to, status_code=303)
 
 
 def create_app(*, use_lifespan: bool = True) -> FastAPI:

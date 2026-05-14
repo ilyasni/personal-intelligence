@@ -16,6 +16,7 @@
           <th>Priority</th>
           <th>Confidence</th>
           <th>Due</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -30,10 +31,17 @@
           <td>{{ task.priority }}</td>
           <td>{{ "%.3f"|format(task.confidence) }}</td>
           <td>{{ task.due_at|datetime }}</td>
+          <td>
+            <form method="post" action="/admin/tasks/{{ task.id }}/status" class="inline-form">
+              <input type="hidden" name="status" value="done" />
+              <input type="hidden" name="redirect_to" value="/admin/tasks" />
+              <button type="submit" class="button success">Mark done</button>
+            </form>
+          </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="empty-cell">No open tasks.</td>
+          <td colspan="7" class="empty-cell">No open tasks.</td>
         </tr>
         {% endfor %}
       </tbody>

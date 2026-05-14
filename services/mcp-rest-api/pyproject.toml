@@ -17,6 +17,7 @@ dependencies = [
     "neo4j>=5.28",
     "pydantic-settings>=2.0",
     "python-jose[cryptography]>=3.3",
+    "python-multipart>=0.0.9",
     "qdrant-client>=1.12",
     "uvicorn[standard]>=0.30",
 ]

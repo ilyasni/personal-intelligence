@@ -33,7 +33,7 @@
 | X-05 | `memory-projector` | X | DONE | codex | runtime-v1.0.0 | Postgres canonical writes + Neo4j projection + embedding jobs |
 | E-01 | `mcp-rest-api` baseline | E | DONE | codex | runtime-v1.0.0 | grounded retrieval endpoints + reprocess endpoint |
 | E-02 | Analytics layer v1 | E | DONE | codex | runtime-v1.0.0 | overview, conversations, basic HTML UI |
-| E-03 | Admin UI baseline | E | DONE | codex | runtime-v1.0.6 | multi-page operator UI with overview, conversations, tasks, people, and chats |
+| E-03 | Admin UI baseline | E | DONE | codex | runtime-v1.0.8 | multi-page operator UI with overview, conversations, tasks, people, chats, operator actions, and live-verified detail drill-downs |
 | F-01 | Cutover verification | F | DONE | codex | runtime-v1.0.1 | canonical compose live on server, smoke strict green, cutover audit green, orphan groups absent |
 | F-02 | Deploy automation | F | DONE | codex | runtime-v1.0.5 | manual GitHub Actions deploy + remote rollout script + containerized migration-runner |
 
@@ -55,6 +55,8 @@
 | sprint-11 | 2026-05-14 | A-06 follow-up | canonical-runtime mypy gate activated | `mypy_path` + typed client wrappers removed false-positive noise from src-layout packages |
 | sprint-12 | 2026-05-14 | F-02 | deploy automation online | manual production deploy is now codified and repeatable via GitHub Actions + remote script |
 | sprint-13 | 2026-05-14 | E-03 | admin UI baseline online | FastAPI templates/static replaced inline analytics HTML with a navigable operator console |
+| sprint-14 | 2026-05-14 | E-03 follow-up | operator actions online | detail pages, reprocess flow, task status updates, and chat allowlist toggles made the admin UI operational |
+| sprint-15 | 2026-05-14 | E-03 stabilization | live detail pages verified on server | Postgres/Neo4j shape mismatches were fixed and admin UX flows now pass end-to-end smoke on runtime |
 
 ## Releases
 
@@ -76,6 +78,8 @@
 | v1.0.4 | 2026-05-14 | canonical-runtime mypy gate + src-layout mypy_path baseline | runtime-v1.0.4 |
 | v1.0.5 | 2026-05-14 | manual deploy workflow + remote rollout script + migration-runner | runtime-v1.0.5 |
 | v1.0.6 | 2026-05-14 | admin UI baseline with multi-page control room in mcp-rest-api | runtime-v1.0.6 |
+| v1.0.7 | 2026-05-14 | admin operator actions + detail drill-down pages | runtime-v1.0.7 |
+| v1.0.8 | 2026-05-14 | admin detail-page stabilization + live server UX smoke | runtime-v1.0.8 |
 
 ## Open questions
 

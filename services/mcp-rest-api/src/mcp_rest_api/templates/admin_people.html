@@ -16,7 +16,7 @@
           <th>Topics</th>
           <th>Trust</th>
           <th>Last interaction</th>
-          <th>Context</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -31,7 +31,12 @@
           <td>{{ person.topics|csvish }}</td>
           <td>{{ "%.3f"|format(person.trust_score) }}</td>
           <td>{{ person.last_interaction_at|datetime }}</td>
-          <td><a href="/persons/{{ person.id }}/context">JSON context</a></td>
+          <td>
+            <div class="action-row">
+              <a class="button ghost" href="/admin/people/{{ person.id }}">Profile</a>
+              <a class="button ghost" href="/persons/{{ person.id }}/context">JSON</a>
+            </div>
+          </td>
         </tr>
         {% else %}
         <tr>
