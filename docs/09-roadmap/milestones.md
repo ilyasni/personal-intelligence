@@ -59,6 +59,7 @@
 | sprint-15 | 2026-05-14 | E-03 stabilization | live detail pages verified on server | Postgres/Neo4j shape mismatches were fixed and admin UX flows now pass end-to-end smoke on runtime |
 | sprint-16 | 2026-05-14 | E-03 UX follow-up | privacy controls and flash feedback online | operator actions now acknowledge success states and person block/unblock is exposed as a real admin control |
 | sprint-17 | 2026-05-14 | E-03 access follow-up | direct LAN admin entrypoint online | mcp-rest-api now redirects `/` to `/admin` and can be published to `http://192.168.31.165` without SSH tunneling |
+| sprint-18 | 2026-05-14 | E-03 data recovery | admin data restored from Redis history | empty admin root cause was missing canonical backfill, so `ai-orchestrator.backfill` and an ops runbook were added |
 
 ## Releases
 
@@ -84,6 +85,7 @@
 | v1.0.8 | 2026-05-14 | admin detail-page stabilization + live server UX smoke | runtime-v1.0.8 |
 | v1.0.9 | 2026-05-14 | admin flash UX + person block/unblock controls | runtime-v1.0.9 |
 | v1.1.0 | 2026-05-14 | direct LAN publishing for admin surface + root redirect | runtime-v1.1.0 |
+| v1.1.1 | 2026-05-14 | admin data recovery tooling + backfill runbook | runtime-v1.1.1 |
 
 ## Open questions
 

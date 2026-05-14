@@ -4,7 +4,7 @@ CANONICAL_PY_DIRS := libs/contracts libs/llm-client libs/observability libs/stor
 	services/telegram-ingestor services/ai-orchestrator services/memory-projector \
 	services/embedding-indexer services/mcp-rest-api services/maintenance
 
-.PHONY: help deps up down logs ps smoke smoke-wait smoke-strict cutover-audit cutover-cleanup \
+.PHONY: help deps up down logs ps smoke smoke-wait smoke-strict cutover-audit cutover-cleanup ai-backfill \
         verify lint lint-runtime fmt typecheck typecheck-runtime install install-dev pre-commit-install \
         migrate-runtime deploy-runtime nuke
 
@@ -71,6 +71,9 @@ cutover-audit:
 
 cutover-cleanup:
 	bash scripts/redis-orphan-groups-cutover.sh
+
+ai-backfill:
+	$(COMPOSE) exec -T ai-orchestrator python -m ai_orchestrator.backfill --skip-obvious-test-data
 
 nuke:
 	@echo "WARNING: This will delete all data volumes!"

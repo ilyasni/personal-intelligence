@@ -1,6 +1,7 @@
 # ruff: noqa: TC001,TC002
 from __future__ import annotations
 
+import json
 from contextlib import suppress
 from datetime import UTC
 from typing import Any
@@ -80,6 +81,27 @@ async def _delete_window(redis: RedisClient, tg_chat_id: int) -> None:
     await redis.delete(_window_key(tg_chat_id))
 
 
+def _coerce_json_value(raw_value: Any) -> Any:
+    current = raw_value
+    for _ in range(3):
+        if not isinstance(current, str):
+            return current
+        try:
+            current = json.loads(current)
+        except json.JSONDecodeError:
+            return raw_value
+    return current
+
+
+def _coerce_window_messages(raw_messages: Any) -> list[WindowMessagePayload]:
+    if raw_messages is None:
+        return []
+    raw_messages = _coerce_json_value(raw_messages)
+    if not isinstance(raw_messages, list):
+        return []
+    return [WindowMessagePayload.model_validate(item) for item in raw_messages]
+
+
 async def _load_canonical_context(
     pool: asyncpg.Pool,
     tg_chat_id: int,
@@ -137,7 +159,11 @@ async def _load_canonical_context(
         "recent_windows": [
             {
                 "summary": row["summary"],
-                "topics": ((row["analysis_payload"] or {}).get("topics") if row["analysis_payload"] else []),
+                "topics": (
+                    (_coerce_json_value(row["analysis_payload"]) or {}).get("topics", [])
+                    if row["analysis_payload"]
+                    else []
+                ),
             }
             for row in interaction_rows
         ],
@@ -226,7 +252,7 @@ async def _handle_reprocess(
             return
         await _mark_processed(conn, command.command_id)
 
-    messages = [WindowMessagePayload.model_validate(item) for item in (row["messages"] or [])]
+    messages = _coerce_window_messages(row["messages"])
     await _run_analysis(
         redis=redis,
         db_pool=db_pool,
@@ -253,7 +279,6 @@ async def _flush_window(
     messages = await _load_window_messages(redis, tg_chat_id)
     if not messages:
         return
-    await _delete_window(redis, tg_chat_id)
     await _run_analysis(
         redis=redis,
         db_pool=db_pool,
@@ -265,6 +290,7 @@ async def _flush_window(
         source_event_id=source_event_id,
         trace_id=trace_id,
     )
+    await _delete_window(redis, tg_chat_id)
 
 
 async def _run_analysis(

@@ -107,6 +107,7 @@ pre-commit-install
 ```bash
 make migrate-runtime
 make deploy-runtime
+make ai-backfill
 docker compose -f infra/compose/docker-compose.yml ps
 docker compose -f infra/compose/docker-compose.yml logs -f
 docker compose -f infra/compose/docker-compose.yml up -d
@@ -159,3 +160,23 @@ make smoke
 - отправить тестовое сообщение в allowed chat;
 - просмотреть логи `ai-orchestrator`, `memory-projector`, `embedding-indexer`;
 - при cutover-проверке дополнительно прогнать `make cutover-audit` и, если у transitional consumer groups `pending=0`, `make cutover-cleanup`.
+
+## Если админка пустая
+
+`mcp-rest-api` может быть `healthy`, но страницы `/admin`, `/admin/people` и `/admin/conversations` всё равно будут почти пустыми, если canonical AI pipeline ещё не сформировал `analysis_window`, `interaction` и `analytics_signal`.
+
+Проверять в таком порядке:
+
+1. Убедиться, что ingestion вообще пишет историю в Redis stream `events.telegram.message`.
+2. Проверить, что `ai-orchestrator` читает новые события без ошибок.
+3. Если runtime поднят поверх уже существующей истории, выполнить backfill:
+
+```bash
+make ai-backfill
+```
+
+Эта команда повторно прогоняет `events.telegram.message` через `ai-orchestrator` и наполняет `analysis_window`, `task`, `interaction` и `analytics_signal`.
+
+Практическое замечание:
+
+- если `telegram-ingestor` временно теряет доступ к Telegram и в логах идут `TelegramNetworkError` / timeout, админка не будет обновляться в реальном времени, даже если исторический backfill уже выполнен.
