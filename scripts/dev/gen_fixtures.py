@@ -12,12 +12,6 @@ from uuid import NAMESPACE_DNS, uuid5
 
 ROOT = Path(__file__).resolve().parents[2]
 
-import sys
-
-sys.path.insert(0, str(ROOT / "libs" / "contracts" / "src"))
-
-from pil_contracts import TelegramMessageEvent
-
 
 DEFAULT_OUTPUT_DIR = ROOT / "tests" / "fixtures"
 DEFAULT_SEED = 20260514
@@ -201,12 +195,11 @@ def build_chats() -> list[dict[str, Any]]:
     return chats
 
 
-def build_message_events(seed: int) -> list[TelegramMessageEvent]:
+def build_message_events(seed: int) -> list[dict[str, Any]]:
     rng = random.Random(seed)
     people_by_slug = {person.slug: person for person in PERSONS}
-    chats_by_slug = {chat.slug: chat for chat in CHATS}
 
-    events: list[TelegramMessageEvent] = []
+    events: list[dict[str, Any]] = []
     base_time = datetime(2026, 5, 14, 9, 0, tzinfo=UTC)
     message_id = 1000
 
@@ -218,23 +211,29 @@ def build_message_events(seed: int) -> list[TelegramMessageEvent]:
             reply_to = previous_message_id if turn_index > 0 and turn_index % 2 == 1 else None
             message_id += 1
             events.append(
-                TelegramMessageEvent(
-                    event_id=f"fixture-{chat.slug}-{message_id}",
-                    occurred_at=current_time,
-                    trace_id=f"fixture-trace-{chat.slug}",
-                    tg_chat_id=chat.tg_chat_id,
-                    tg_message_id=message_id,
-                    tg_sender_id=person.tg_user_id,
-                    tg_sender_username=person.username,
-                    tg_sender_name=person.display_name,
-                    chat_title=chat.title,
-                    chat_type=chat.kind,
-                    text=text,
-                    reply_to_message_id=reply_to,
-                    is_forwarded=turn_index == 2 and chat.kind == "group",
-                    tg_date=current_time,
-                    raw_s3_key=f"raw/2026/05/14/{chat.tg_chat_id}/{message_id}.json",
-                )
+                {
+                    "event_id": f"fixture-{chat.slug}-{message_id}",
+                    "schema_version": 1,
+                    "occurred_at": current_time.isoformat(),
+                    "trace_id": f"fixture-trace-{chat.slug}",
+                    "backfill": False,
+                    "stream": "events.telegram.message",
+                    "tg_chat_id": chat.tg_chat_id,
+                    "tg_message_id": message_id,
+                    "tg_sender_id": person.tg_user_id,
+                    "tg_sender_username": person.username,
+                    "tg_sender_name": person.display_name,
+                    "chat_title": chat.title,
+                    "chat_type": chat.kind,
+                    "text": text,
+                    "media_type": None,
+                    "media_mime": None,
+                    "reply_to_message_id": reply_to,
+                    "via_business_bot": False,
+                    "is_forwarded": turn_index == 2 and chat.kind == "group",
+                    "tg_date": current_time.isoformat(),
+                    "raw_s3_key": f"raw/2026/05/14/{chat.tg_chat_id}/{message_id}.json",
+                }
             )
             previous_message_id = message_id
             current_time += timedelta(minutes=5 + rng.randint(0, 10))
@@ -242,15 +241,15 @@ def build_message_events(seed: int) -> list[TelegramMessageEvent]:
     return events
 
 
-def build_summary_gold(events: list[TelegramMessageEvent]) -> list[dict[str, Any]]:
-    grouped: dict[int, list[TelegramMessageEvent]] = {}
+def build_summary_gold(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[int, list[dict[str, Any]]] = {}
     for event in events:
-        grouped.setdefault(event.tg_chat_id, []).append(event)
+        grouped.setdefault(int(event["tg_chat_id"]), []).append(event)
 
     output: list[dict[str, Any]] = []
     for chat in CHATS:
         chat_events = grouped[chat.tg_chat_id]
-        text_blob = " ".join(event.text or "" for event in chat_events)
+        text_blob = " ".join(str(event.get("text") or "") for event in chat_events)
         topics = []
         for candidate in ("roadmap", "analytics", "contracts", "embeddings", "tasks", "redis"):
             if candidate in text_blob.lower():
@@ -259,7 +258,7 @@ def build_summary_gold(events: list[TelegramMessageEvent]) -> list[dict[str, Any
             {
                 "chat_slug": chat.slug,
                 "tg_chat_id": chat.tg_chat_id,
-                "message_ids": [event.tg_message_id for event in chat_events],
+                "message_ids": [int(event["tg_message_id"]) for event in chat_events],
                 "summary": _summary_for_chat(chat.slug),
                 "topics": topics,
             }
@@ -275,11 +274,11 @@ def _summary_for_chat(chat_slug: str) -> str:
     return "Sergey requests an updated contract draft, and the owner commits to sending it tomorrow morning."
 
 
-def build_embeddings(events: list[TelegramMessageEvent]) -> list[dict[str, Any]]:
+def build_embeddings(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for chat in CHATS:
-        chat_events = [event for event in events if event.tg_chat_id == chat.tg_chat_id]
-        narrative = " ".join((event.text or "") for event in chat_events)
+        chat_events = [event for event in events if int(event["tg_chat_id"]) == chat.tg_chat_id]
+        narrative = " ".join(str(event.get("text") or "") for event in chat_events)
         records.append(
             {
                 "chunk_id": stable_uuid(f"embedding:{chat.slug}"),
@@ -350,10 +349,10 @@ def generate_fixture_bundle(output_dir: Path, seed: int = DEFAULT_SEED) -> dict[
     write_json(output_dir / "chats" / "seed_chats.json", chats)
     write_jsonl(
         output_dir / "events" / "telegram_messages.jsonl",
-        [event.model_dump(mode="json") for event in events],
+        events,
     )
-    write_json(output_dir / "telegram_updates.json", [event.model_dump(mode="json") for event in events])
-    write_json(output_dir / "messages_for_entities.json", [event.model_dump(mode="json") for event in events])
+    write_json(output_dir / "telegram_updates.json", events)
+    write_json(output_dir / "messages_for_entities.json", events)
     write_json(output_dir / "summaries_gold.json", summaries)
     write_json(output_dir / "embeddings.json", embeddings)
     sql_path = output_dir / "sql" / "seed_reference.sql"
