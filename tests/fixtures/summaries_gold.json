@@ -1,0 +1,45 @@
+[
+  {
+    "chat_slug": "anna-private",
+    "tg_chat_id": 810000001,
+    "message_ids": [
+      1001,
+      1002,
+      1003,
+      1004
+    ],
+    "summary": "Anna asks for roadmap and analytics review; the owner promises comments and a checklist update today.",
+    "topics": [
+      "roadmap",
+      "analytics"
+    ]
+  },
+  {
+    "chat_slug": "product-sync",
+    "tg_chat_id": 810000002,
+    "message_ids": [
+      1005,
+      1006,
+      1007,
+      1008,
+      1009
+    ],
+    "summary": "The group discusses Redis cleanup, embeddings evaluation, and a stakeholder summary due by Friday.",
+    "topics": [
+      "embeddings",
+      "tasks",
+      "redis"
+    ]
+  },
+  {
+    "chat_slug": "sergey-private",
+    "tg_chat_id": 810000003,
+    "message_ids": [
+      1010,
+      1011,
+      1012
+    ],
+    "summary": "Sergey requests an updated contract draft, and the owner commits to sending it tomorrow morning.",
+    "topics": []
+  }
+]

@@ -1,0 +1,72 @@
+[
+  {
+    "id": "6cd1ae6c-a828-582d-bebe-b792450e9782",
+    "slug": "anna-private",
+    "tg_chat_id": 810000001,
+    "kind": "private",
+    "title": "Anna Petrova",
+    "is_allowed": true,
+    "participants": [
+      {
+        "person_slug": "owner",
+        "tg_user_id": 700000001,
+        "display_name": "Ilya Nikitin"
+      },
+      {
+        "person_slug": "anna",
+        "tg_user_id": 700000101,
+        "display_name": "Anna Petrova"
+      }
+    ]
+  },
+  {
+    "id": "528a43ef-8ad4-5eab-91fd-3a662cccf5e5",
+    "slug": "product-sync",
+    "tg_chat_id": 810000002,
+    "kind": "group",
+    "title": "Product Sync",
+    "is_allowed": true,
+    "participants": [
+      {
+        "person_slug": "owner",
+        "tg_user_id": 700000001,
+        "display_name": "Ilya Nikitin"
+      },
+      {
+        "person_slug": "anna",
+        "tg_user_id": 700000101,
+        "display_name": "Anna Petrova"
+      },
+      {
+        "person_slug": "maksim",
+        "tg_user_id": 700000102,
+        "display_name": "Maksim Volkov"
+      },
+      {
+        "person_slug": "elena",
+        "tg_user_id": 700000104,
+        "display_name": "Elena Sokolova"
+      }
+    ]
+  },
+  {
+    "id": "4e4dd028-cd47-5548-bd7b-931159ab9b34",
+    "slug": "sergey-private",
+    "tg_chat_id": 810000003,
+    "kind": "private",
+    "title": "Sergey Kim",
+    "is_allowed": true,
+    "participants": [
+      {
+        "person_slug": "owner",
+        "tg_user_id": 700000001,
+        "display_name": "Ilya Nikitin"
+      },
+      {
+        "person_slug": "sergey",
+        "tg_user_id": 700000103,
+        "display_name": "Sergey Kim"
+      }
+    ]
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "seed": 20260514,
+  "generator_version": 1,
+  "persons": 5,
+  "chats": 3,
+  "messages": 12,
+  "embeddings": 3,
+  "files": [
+    "persons/seed_persons.json",
+    "chats/seed_chats.json",
+    "events/telegram_messages.jsonl",
+    "telegram_updates.json",
+    "messages_for_entities.json",
+    "summaries_gold.json",
+    "embeddings.json",
+    "sql/seed_reference.sql"
+  ]
+}

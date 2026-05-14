@@ -1,0 +1,88 @@
+[
+  {
+    "id": "3844fbd2-eec3-54dc-866f-82887b833ae7",
+    "slug": "owner",
+    "tg_user_id": 700000001,
+    "username": "ilya_owner",
+    "display_name": "Ilya Nikitin",
+    "is_owner": true,
+    "organizations": [
+      "frontier-intelligence",
+      "wormsoft-labs"
+    ],
+    "topics": [
+      "personal-intelligence",
+      "ai-architecture",
+      "product-strategy"
+    ],
+    "notes": "Owner profile used for deterministic PIL demo data."
+  },
+  {
+    "id": "ce4dd801-8985-51ef-8e01-0ffe3cadeb97",
+    "slug": "anna",
+    "tg_user_id": 700000101,
+    "username": "annapm",
+    "display_name": "Anna Petrova",
+    "is_owner": false,
+    "organizations": [
+      "north-star-product"
+    ],
+    "topics": [
+      "roadmap",
+      "customer-research",
+      "analytics"
+    ],
+    "notes": "Product manager counterpart for task-heavy chats."
+  },
+  {
+    "id": "158f6222-af52-5ceb-ad10-01858f0b32b3",
+    "slug": "maksim",
+    "tg_user_id": 700000102,
+    "username": "maksdev",
+    "display_name": "Maksim Volkov",
+    "is_owner": false,
+    "organizations": [
+      "north-star-product"
+    ],
+    "topics": [
+      "backend",
+      "postgres",
+      "redis-streams"
+    ],
+    "notes": "Engineering lead for group conversation fixtures."
+  },
+  {
+    "id": "a5c31a6b-e282-5271-b096-a82bf935b48c",
+    "slug": "sergey",
+    "tg_user_id": 700000103,
+    "username": "sergey_sales",
+    "display_name": "Sergey Kim",
+    "is_owner": false,
+    "organizations": [
+      "east-bridge-consulting"
+    ],
+    "topics": [
+      "contracts",
+      "pricing",
+      "follow-up"
+    ],
+    "notes": "Sales-style contact used for promises and due dates."
+  },
+  {
+    "id": "131fff4e-031e-5892-9dc7-7feaf4e878f3",
+    "slug": "elena",
+    "tg_user_id": 700000104,
+    "username": "elenadata",
+    "display_name": "Elena Sokolova",
+    "is_owner": false,
+    "organizations": [
+      "insight-lab"
+    ],
+    "topics": [
+      "embeddings",
+      "qdrant",
+      "evaluation"
+    ],
+    "notes": "Data/ML profile for embeddings and analytics fixtures."
+  }
+]

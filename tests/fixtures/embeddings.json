@@ -1,0 +1,59 @@
+[
+  {
+    "chunk_id": "e75b5c32-a571-57ac-91a8-a372887d71e1",
+    "chat_slug": "anna-private",
+    "tg_chat_id": 810000001,
+    "text": "I put the roadmap notes in Notion. Please review the Q2 priorities today. Got it, I will review the roadmap and send comments before 18:00. Also check the analytics screenshot in https://example.com/q2-metrics. Will do. I will summarize the metrics and update the launch checklist.",
+    "vector": [
+      -0.066629,
+      -0.911943,
+      0.660403,
+      0.020663,
+      -0.889263,
+      0.271084,
+      -0.229757,
+      0.349351
+    ],
+    "profile_provider": "wormsoft",
+    "profile_model": "qwen/qwen3-embedding:8b",
+    "profile_alias": "pil_memory_active"
+  },
+  {
+    "chunk_id": "3fd68fca-f7c5-5911-8aea-fb141314a01a",
+    "chat_slug": "product-sync",
+    "tg_chat_id": 810000002,
+    "text": "Redis backlog is stable, but we still need a cleanup plan for old consumer groups. Qdrant alias switch looked good. I can prepare an evaluation note for embeddings tomorrow. Please prepare the note and include wormsoft versus polza trade-offs. I need a concise summary for stakeholders by Friday morning. I will send the stakeholder summary and tag the open tasks after lunch.",
+    "vector": [
+      0.641469,
+      0.188221,
+      0.517695,
+      0.392037,
+      -0.477606,
+      0.645515,
+      -0.202299,
+      0.464775
+    ],
+    "profile_provider": "wormsoft",
+    "profile_model": "qwen/qwen3-embedding:8b",
+    "profile_alias": "pil_memory_active"
+  },
+  {
+    "chunk_id": "a25efc48-6916-5064-9fcb-4bb5ae85c34f",
+    "chat_slug": "sergey-private",
+    "tg_chat_id": 810000003,
+    "text": "Can you send the updated contract draft this week? Yes, I will send the contract draft tomorrow morning. Perfect, then I will confirm pricing on my side.",
+    "vector": [
+      0.807812,
+      -0.557964,
+      -0.057845,
+      0.266928,
+      0.546809,
+      0.1256,
+      -0.353178,
+      -0.53377
+    ],
+    "profile_provider": "wormsoft",
+    "profile_model": "qwen/qwen3-embedding:8b",
+    "profile_alias": "pil_memory_active"
+  }
+]
