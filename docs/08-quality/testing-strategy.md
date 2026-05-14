@@ -75,6 +75,7 @@
 - `embeddings.json` — стабильные эмбеддинги для seed-чанков.
 
 Генератор `scripts/dev/gen_fixtures.py` пока запланирован тикетом B-03.
+Генератор `scripts/dev/gen_fixtures.py` уже реализован; baseline bundle коммитится в `tests/fixtures/`.
 
 ## Поведение в случае ML/LLM
 

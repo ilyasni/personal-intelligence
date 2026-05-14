@@ -19,7 +19,7 @@
 | A-07 | ADR baseline | A | DRAFT | - | - | |
 | B-01 | Core migrations | B | DONE | claude | db-v0.3.0 | |
 | B-02 | Interaction / task / audit tables | B | DONE | claude | db-v0.5.0 | |
-| B-03 | Seed / fixtures | B | TODO | - | - | |
+| B-03 | Seed / fixtures | B | DONE | codex | runtime-v1.0.3 | deterministic fixture generator + committed tests/fixtures bundle + SQL seed reference |
 | B-04 | `maintenance` | B | DONE | codex | ops-v0.7.0 | future partitions + processed_event retention |
 | C-01 | `telegram-ingestor` | C | DONE | claude | ingest-v0.4.0 | polling via xray |
 | D-01 | `entity-extractor` | D | DONE | claude | extract-v0.5.0 | transitional runtime only |
@@ -49,6 +49,7 @@
 | sprint-7 | 2026-05-13 | X-02..X-05, E-01, E-02 | canonical AI runtime implemented | Context7 verification is now mandatory for infra-facing implementation blocks |
 | sprint-8 | 2026-05-14 | F-01 | server cutover verified | CRLF-safe audit scripts and idempotent orphan cleanup simplified remote ops |
 | sprint-9 | 2026-05-14 | A-06 | baseline CI activated | GitHub Actions now covers lint, typecheck, and tests before merge |
+| sprint-10 | 2026-05-14 | B-03 | deterministic fixtures online | committed seed bundle now backs tests, demos, and smoke tooling |
 
 ## Releases
 
@@ -66,6 +67,7 @@
 | v1.0.0 | 2026-05-13 | canonical AI runtime + analytics API/UI baseline | runtime-v1.0.0 |
 | v1.0.1 | 2026-05-14 | cutover verification + server-side audit tooling | runtime-v1.0.1 |
 | v1.0.2 | 2026-05-14 | baseline GitHub Actions CI workflow | runtime-v1.0.2 |
+| v1.0.3 | 2026-05-14 | deterministic seed/fixtures bundle | runtime-v1.0.3 |
 
 ## Open questions
 

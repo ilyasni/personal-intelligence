@@ -260,7 +260,8 @@ Lifecycle policy: `raw/` и `raw-media/` — auto-expire по `setting.retention
 ## Тестовые фикстуры
 
 - `tests/fixtures/sql/` — небольшие seed-наборы.
-- Генератор реалистичных фикстур остаётся задачей B-03; пока используются небольшие hand-written seed-наборы и integration fixtures.
+- Базовый детерминированный генератор фикстур: `scripts/dev/gen_fixtures.py`.
+- После изменения fixture-схемы генератор нужно прогонять повторно и коммитить обновлённый bundle в `tests/fixtures/`.
 
 ## Открытые вопросы
 
