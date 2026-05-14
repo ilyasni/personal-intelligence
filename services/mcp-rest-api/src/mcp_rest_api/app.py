@@ -5,6 +5,7 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, cast
+from urllib.parse import quote
 
 import asyncpg
 from fastapi import APIRouter, FastAPI, Form, HTTPException, Request
@@ -70,6 +71,18 @@ def _normalize_string_list(value: Any) -> list[str]:
     return []
 
 
+FLASH_MESSAGES = {
+    "window_requeued": ("success", "Reprocess was queued for this conversation window."),
+    "task_status_done": ("success", "Task status updated to done."),
+    "task_status_open": ("success", "Task status updated to open."),
+    "task_status_dropped": ("warn", "Task status updated to dropped."),
+    "chat_allowed": ("success", "Chat added to allowlist."),
+    "chat_disallowed": ("warn", "Chat removed from allowlist."),
+    "person_blocked": ("warn", "Person was blocked from ingestion and downstream processing."),
+    "person_unblocked": ("success", "Person was unblocked and can flow through ingestion again."),
+}
+
+
 templates.env.filters["datetime"] = _format_datetime
 templates.env.filters["csvish"] = _join_values
 templates.env.filters["bool_label"] = _bool_label
@@ -114,8 +127,22 @@ def _template_context(
         "page_title": page_title,
         "current_page": current_page,
         "static_path": str(request.url_for("static", path="admin.css")),
+        "flash": _get_flash_message(request),
         **extra,
     }
+
+
+def _get_flash_message(request: Request) -> dict[str, str] | None:
+    key = request.query_params.get("flash")
+    if not key:
+        return None
+    level, text = FLASH_MESSAGES.get(key, ("info", "Action completed."))
+    return {"level": level, "text": text}
+
+
+def _redirect_with_flash(path: str, flash_key: str) -> RedirectResponse:
+    separator = "&" if "?" in path else "?"
+    return RedirectResponse(url=f"{path}{separator}flash={quote(flash_key)}", status_code=303)
 
 
 async def get_open_tasks_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
@@ -435,6 +462,23 @@ async def update_task_status(app: FastAPI, task_id: str, *, status: str) -> None
         raise HTTPException(status_code=404, detail="task_not_found")
 
 
+async def set_person_blocked(app: FastAPI, person_id: str, *, blocked: bool) -> None:
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            UPDATE person
+            SET blocked = $2,
+                updated_at = now()
+            WHERE id = $1::uuid
+            """,
+            person_id,
+            blocked,
+        )
+    if result.endswith("0"):
+        raise HTTPException(status_code=404, detail="person_not_found")
+
+
 async def set_chat_allowlist(app: FastAPI, chat_id: str, *, is_allowed: bool) -> None:
     pool: asyncpg.Pool = app.state.db_pool
     async with pool.acquire() as conn:
@@ -460,7 +504,7 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
     async with pool.acquire() as conn:
         person = await conn.fetchrow(
             """
-            SELECT id, tg_user_id, username, display_name, topics, organizations, notes, last_interaction_at
+            SELECT id, tg_user_id, username, display_name, topics, organizations, notes, last_interaction_at, blocked
             FROM person
             WHERE id = $1::uuid
             """,
@@ -635,7 +679,7 @@ async def admin_reprocess_window(request: Request, window_id: str) -> RedirectRe
     redis: RedisClient = request.app.state.redis
     command = ReprocessWindowCommand(window_id=window_id)
     await redis.xadd(STREAM_AI_REPROCESS_WINDOW, {"data": command.model_dump_json()})
-    return RedirectResponse(url=f"/admin/conversations/{window_id}?queued=1", status_code=303)
+    return _redirect_with_flash(f"/admin/conversations/{window_id}", "window_requeued")
 
 
 @router.get("/admin/tasks", response_class=HTMLResponse, include_in_schema=False)
@@ -661,7 +705,7 @@ async def admin_task_status(
     redirect_to: Annotated[str, Form()] = "/admin/tasks",
 ) -> RedirectResponse:
     await update_task_status(request.app, task_id, status=status)
-    return RedirectResponse(url=redirect_to, status_code=303)
+    return _redirect_with_flash(redirect_to, f"task_status_{status}")
 
 
 @router.get("/admin/people", response_class=HTMLResponse, include_in_schema=False)
@@ -692,6 +736,20 @@ async def admin_person_detail(request: Request, person_id: str) -> HTMLResponse:
             detail=detail,
         ),
     )
+
+
+@router.post("/admin/people/{person_id}/block", include_in_schema=False)
+async def admin_person_block(
+    request: Request,
+    person_id: str,
+    redirect_to: Annotated[str, Form()] = "/admin/people",
+) -> RedirectResponse:
+    detail = await get_person_detail_data(request.app, person_id)
+    current = bool(detail["person"]["blocked"])
+    blocked = not current
+    await set_person_blocked(request.app, person_id, blocked=blocked)
+    flash_key = "person_blocked" if blocked else "person_unblocked"
+    return _redirect_with_flash(redirect_to, flash_key)
 
 
 @router.get("/admin/chats", response_class=HTMLResponse, include_in_schema=False)
@@ -732,8 +790,10 @@ async def admin_chat_allowlist(
 ) -> RedirectResponse:
     detail = await get_chat_detail_data(request.app, chat_id)
     current = bool(detail["chat"]["is_allowed"])
-    await set_chat_allowlist(request.app, chat_id, is_allowed=not current)
-    return RedirectResponse(url=redirect_to, status_code=303)
+    allowed = not current
+    await set_chat_allowlist(request.app, chat_id, is_allowed=allowed)
+    flash_key = "chat_allowed" if allowed else "chat_disallowed"
+    return _redirect_with_flash(redirect_to, flash_key)
 
 
 def create_app(*, use_lifespan: bool = True) -> FastAPI:

@@ -103,6 +103,32 @@ a:hover {
   padding: 28px;
 }
 
+.flash {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.flash.success {
+  background: rgba(45, 106, 79, 0.12);
+  border-color: rgba(45, 106, 79, 0.24);
+  color: #1f4f3b;
+}
+
+.flash.warn {
+  background: rgba(156, 61, 36, 0.12);
+  border-color: rgba(156, 61, 36, 0.24);
+  color: #7f2f1c;
+}
+
+.flash.info {
+  background: rgba(40, 78, 65, 0.1);
+  border-color: rgba(40, 78, 65, 0.2);
+  color: var(--accent-strong);
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -252,6 +278,22 @@ th {
 .pill.muted {
   background: rgba(31, 42, 36, 0.08);
   color: var(--muted);
+}
+
+.status-chip {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.status-chip.blocked {
+  background: rgba(156, 61, 36, 0.12);
+  color: #8d2f16;
 }
 
 .button {

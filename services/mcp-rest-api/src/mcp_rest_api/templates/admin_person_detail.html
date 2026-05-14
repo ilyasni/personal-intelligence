@@ -8,11 +8,20 @@
       <h3>{{ detail.person.display_name }}</h3>
       <p class="panel-copy">@{{ detail.person.username or "unknown" }} · Last interaction {{ detail.person.last_interaction_at|datetime }}</p>
     </div>
-    <a class="button ghost" href="/persons/{{ detail.person.id }}/context">Open JSON context</a>
+    <div class="action-row">
+      <a class="button ghost" href="/persons/{{ detail.person.id }}/context">Open JSON context</a>
+      <form method="post" action="/admin/people/{{ detail.person.id }}/block" class="inline-form">
+        <input type="hidden" name="redirect_to" value="/admin/people/{{ detail.person.id }}" />
+        <button type="submit" class="button {% if detail.person.blocked %}success{% else %}warn{% endif %}">
+          {% if detail.person.blocked %}Unblock person{% else %}Block person{% endif %}
+        </button>
+      </form>
+    </div>
   </div>
   <div class="metric-inline">
     <span>Topics: {{ detail.person.topics|csvish }}</span>
     <span>Organizations: {{ detail.person.organizations|csvish }}</span>
+    <span>Status: {% if detail.person.blocked %}blocked{% else %}active{% endif %}</span>
   </div>
 </section>
 

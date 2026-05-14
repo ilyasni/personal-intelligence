@@ -36,6 +36,11 @@
             <h2>{{ page_title }}</h2>
           </div>
         </header>
+        {% if flash %}
+        <section class="flash flash-{{ flash.level }}">
+          <strong>{{ flash.text }}</strong>
+        </section>
+        {% endif %}
         {% block content %}{% endblock %}
       </main>
     </div>

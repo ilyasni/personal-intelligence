@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
-    state: dict[str, Any] = {"task_updates": [], "allowlist_updates": []}
+    state: dict[str, Any] = {"task_updates": [], "allowlist_updates": [], "person_block_updates": []}
 
     async def fake_overview(_app: Any, days: int = 14) -> dict[str, Any]:
         return {
@@ -135,6 +135,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
                 "last_interaction_at": "2026-05-14 08:20",
                 "topics": ["ops", "memory"],
                 "organizations": ["PIL"],
+                "blocked": False,
             },
             "recent_windows": [{"id": "window-1", "summary": "Discussed rollout details.", "window_end": "2026-05-14 08:15"}],
             "tasks": [{"title": "Ship admin UI", "description": "Finish operator screens", "status": "open", "due_at": "2026-05-15 10:00"}],
@@ -165,6 +166,9 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     async def fake_set_chat_allowlist(_app: Any, chat_id: str, *, is_allowed: bool) -> None:
         state["allowlist_updates"].append((chat_id, is_allowed))
 
+    async def fake_set_person_blocked(_app: Any, person_id: str, *, blocked: bool) -> None:
+        state["person_block_updates"].append((person_id, blocked))
+
     monkeypatch.setattr(mcp_app, "get_analytics_overview_data", fake_overview)
     monkeypatch.setattr(mcp_app, "get_conversation_data", fake_conversations)
     monkeypatch.setattr(mcp_app, "get_open_tasks_data", fake_tasks)
@@ -175,6 +179,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(mcp_app, "get_chat_detail_data", fake_chat_detail)
     monkeypatch.setattr(mcp_app, "update_task_status", fake_update_task_status)
     monkeypatch.setattr(mcp_app, "set_chat_allowlist", fake_set_chat_allowlist)
+    monkeypatch.setattr(mcp_app, "set_person_blocked", fake_set_person_blocked)
     return mcp_app.create_app(use_lifespan=False), state
 
 
@@ -203,6 +208,7 @@ def test_admin_people_links_context(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 200
     assert "ilyasni" in response.text
     assert "/persons/person-1/context" in response.text
+    assert "Block" in response.text
 
 
 def test_conversation_detail_renders_messages_and_claims(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -224,7 +230,7 @@ def test_task_status_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
             follow_redirects=False,
         )
     assert response.status_code == 303
-    assert response.headers["location"] == "/admin/tasks"
+    assert response.headers["location"] == "/admin/tasks?flash=task_status_done"
     assert state["task_updates"] == [("task-1", "done")]
 
 
@@ -237,5 +243,18 @@ def test_chat_allowlist_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
             follow_redirects=False,
         )
     assert response.status_code == 303
-    assert response.headers["location"] == "/admin/chats/chat-1"
+    assert response.headers["location"] == "/admin/chats/chat-1?flash=chat_disallowed"
     assert state["allowlist_updates"] == [("chat-1", False)]
+
+
+def test_person_block_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.post(
+            "/admin/people/person-1/block",
+            data={"redirect_to": "/admin/people/person-1"},
+            follow_redirects=False,
+        )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/people/person-1?flash=person_blocked"
+    assert state["person_block_updates"] == [("person-1", True)]

@@ -25,6 +25,9 @@
           <td>
             <strong>{{ person.display_name }}</strong>
             <div class="subtle">{{ person.communication_style or "No style summary yet" }}</div>
+            {% if person.blocked %}
+            <div class="status-chip blocked">Blocked</div>
+            {% endif %}
           </td>
           <td>@{{ person.username or "unknown" }}</td>
           <td>{{ person.organizations|csvish }}</td>
@@ -35,6 +38,12 @@
             <div class="action-row">
               <a class="button ghost" href="/admin/people/{{ person.id }}">Profile</a>
               <a class="button ghost" href="/persons/{{ person.id }}/context">JSON</a>
+              <form method="post" action="/admin/people/{{ person.id }}/block" class="inline-form">
+                <input type="hidden" name="redirect_to" value="/admin/people" />
+                <button type="submit" class="button {% if person.blocked %}success{% else %}warn{% endif %}">
+                  {% if person.blocked %}Unblock{% else %}Block{% endif %}
+                </button>
+              </form>
             </div>
           </td>
         </tr>
