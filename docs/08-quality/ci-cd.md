@@ -51,15 +51,29 @@ Best practices, которые уже применены:
 2. push в целевой registry (`ghcr.io` или другой выбранный registry)
 3. tag: `git sha`, `latest`, `vX.Y.Z` если на тэге
 
-### `.github/workflows/deploy.yml` (вручную или на release-тэг)
+### `.github/workflows/deploy.yml` (вручную, через GitHub Actions environment `production`)
 
-Пока ещё не реализован.
+Уже реализован как manual deploy workflow.
 
-1. ssh на текущий server runtime
-2. обновить checkout/runtime, затем `make migrate` (или ручной `alembic upgrade head`)
-3. `make up` (rolling restart)
-4. `make smoke`
-5. в случае smoke fail — авто-rollback на предыдущий `git sha`
+1. запуск только через `workflow_dispatch`
+2. обязательное подтверждение `confirm_production=true`
+3. serial rollout через workflow-level `concurrency` без `cancel-in-progress`
+4. SSH на текущий server runtime
+5. запуск `scripts/deploy/remote-deploy.sh <ref>`
+6. `git fetch` + `git checkout` + `git pull --ff-only`
+7. `docker compose build` для canonical runtime и `migration-runner`
+8. `docker compose up -d --wait` для data-layer
+9. `migration-runner upgrade head`
+10. `docker compose up -d --wait` для app-layer
+11. финальный smoke-check по `mcp-rest-api /healthz`
+
+Best practices, которые уже применены:
+
+- manual production deploy не запускается автоматически на каждый merge;
+- защищённый `environment` для production secrets/vars;
+- подтверждение деплоя отдельным boolean input;
+- serial execution через `concurrency`, чтобы не пересекались два деплоя;
+- миграции выполняются из отдельного containerized `migration-runner`, а не из случайного app-container.
 
 ### `.github/workflows/nightly.yml`
 

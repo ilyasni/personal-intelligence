@@ -5,11 +5,14 @@ CANONICAL_PY_DIRS := libs/contracts libs/llm-client libs/observability libs/stor
 	services/embedding-indexer services/mcp-rest-api services/maintenance
 
 .PHONY: help deps up down logs ps smoke smoke-wait smoke-strict cutover-audit cutover-cleanup \
-        verify lint lint-runtime fmt typecheck typecheck-runtime install install-dev pre-commit-install nuke
+        verify lint lint-runtime fmt typecheck typecheck-runtime install install-dev pre-commit-install \
+        migrate-runtime deploy-runtime nuke
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 help:
 	@echo "PIL project targets:"
+	@echo "    migrate-runtime вЂ” РїСЂРѕРіРЅР°С‚СЊ Alembic РІ containerized migration-runner"
+	@echo "    deploy-runtime вЂ” build + migrate-runtime + up --wait + smoke-strict"
 	@echo ""
 	@echo "  Infrastructure:"
 	@echo "    deps        — поднять хранилища (postgres, redis, neo4j, qdrant)"
@@ -96,6 +99,16 @@ migrate:
 migrate-status:
 	POSTGRES_DSN=postgresql+psycopg2://pil:$(shell grep POSTGRES_PASSWORD $(COMPOSE_DIR)/.env | cut -d= -f2)@localhost:5432/pil \
 	  alembic -c migrations/alembic.ini current
+
+migrate-runtime:
+	$(COMPOSE) run --rm migration-runner upgrade head
+
+deploy-runtime:
+	$(COMPOSE) build migration-runner xray telegram-ingestor ai-orchestrator memory-projector embedding-indexer maintenance mcp-rest-api
+	$(COMPOSE) up -d --wait --wait-timeout 120 postgres redis neo4j qdrant
+	$(COMPOSE) run --rm migration-runner upgrade head
+	$(COMPOSE) up -d --wait --wait-timeout 240 xray telegram-ingestor ai-orchestrator memory-projector embedding-indexer maintenance mcp-rest-api
+	$(MAKE) smoke-strict
 
 lint:
 	ruff check libs/ services/

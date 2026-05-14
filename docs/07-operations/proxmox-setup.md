@@ -58,10 +58,10 @@ Docker настроен:
 
 Важно:
 
-- это **runtime working tree**, а не полноценный git checkout;
-- `docs/` и `scripts/` синхронизируются на сервер для ops и handoff, но история git и tooling могут отличаться от локальной planning-копии;
+- это **server truth checkout** с настроенным `origin` на `github-personal-intelligence:ilyasni/personal-intelligence.git`;
+- `docs/` и `scripts/` хранятся в том же checkout и обновляются вместе с runtime-кодом;
 - корневой `Makefile` и compose/smoke tooling уже должны присутствовать в актуальном runtime-дереве;
-- документация и roadmap всё ещё ведутся из локального planning-repo и затем синхронизируются на сервер.
+- локальная planning-копия остаётся удобной рабочей средой, но deploy/source-of-truth теперь живёт на сервере в `~/pil`.
 
 ## Стек сервисов (deps)
 
@@ -83,16 +83,18 @@ Docker настроен:
 ssh ilyasni@192.168.31.165
 cd ~/pil
 
-# compose-стек
-docker compose -f infra/compose/docker-compose.yml up -d postgres redis neo4j qdrant
-docker compose -f infra/compose/docker-compose.yml up -d
-
-# миграции
-POSTGRES_DSN=postgresql+psycopg2://pil:<password>@localhost:5432/pil \
-  alembic -c migrations/alembic.ini upgrade head
+# preferred: GitHub Actions workflow_dispatch -> Deploy
+# fallback from server shell:
+bash scripts/deploy/remote-deploy.sh main
 ```
 
-Если работаешь из полного checkout с корневым `Makefile`, те же действия можно выполнять через `make deps`, `make up`, `make migrate`, `make smoke`.
+Если нужен ручной rollout из checkout без GitHub Actions:
+
+```bash
+make deploy-runtime
+```
+
+`deploy-runtime` сам выполнит build, поднимет data-layer через `docker compose up -d --wait`, прогонит `migration-runner`, затем поднимет app-layer и завершит всё через `make smoke-strict`.
 
 ## Snapshots и backup
 
@@ -111,5 +113,5 @@ POSTGRES_DSN=postgresql+psycopg2://pil:<password>@localhost:5432/pil \
 Если VM умерла:
 1. Восстановить из Proxmox-снапшота.
 2. Вернуть актуальное runtime-дерево в `~/pil` и проверить наличие `infra/compose/.env`.
-3. `make deps` + `make up` + `make migrate` + `make smoke-strict`.
+3. `make deploy-runtime`.
 4. При canonical cutover дополнительно прогнать `make cutover-audit`.

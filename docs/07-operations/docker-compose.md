@@ -37,7 +37,8 @@ infra/
 | memory-projector   | pil/memory-projector            | service        | redis, postgres, neo4j, S3  |
 | embedding-indexer  | pil/embedding-indexer           | service        | redis, qdrant, Wormsoft embeddings |
 | mcp-rest-api       | pil/mcp-rest-api                | service        | postgres, redis, neo4j, qdrant |
-| maintenance        | pil/maintenance                  | service        | postgres                    |
+| maintenance        | pil/maintenance                 | service        | postgres                    |
+| migration-runner   | one-off local build             | ops            | postgres, migrations        |
 
 Планируются, но пока не подключены в текущий compose:
 
@@ -89,6 +90,8 @@ ps
 smoke
 migrate
 migrate-status
+migrate-runtime
+deploy-runtime
 lint
 fmt
 typecheck
@@ -100,11 +103,15 @@ pre-commit-install
 Текущий server runtime с синхронизированным корневым `Makefile`:
 
 ```bash
+make migrate-runtime
+make deploy-runtime
 docker compose -f infra/compose/docker-compose.yml ps
 docker compose -f infra/compose/docker-compose.yml logs -f
 docker compose -f infra/compose/docker-compose.yml up -d
 docker compose -f infra/compose/docker-compose.yml down
 ```
+
+`migration-runner` используется как one-off контейнер для Alembic-миграций и не должен оставаться постоянно запущенным в runtime.
 
 ## Secrets management
 

@@ -290,6 +290,20 @@ services:
       postgres:
         condition: service_healthy
 
+  migration-runner:
+    build:
+      context: ../..
+      dockerfile: services/migration-runner/Dockerfile
+    profiles:
+      - ops
+    environment:
+      POSTGRES_DSN: postgresql+psycopg2://${POSTGRES_USER:-pil}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pil}
+    networks:
+      - pil-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   mcp-rest-api:
     build:
       context: ../..
