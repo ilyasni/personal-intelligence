@@ -3,20 +3,20 @@
 {% block content %}
 <section class="panel">
   <div class="panel-header">
-    <h3>Open tasks</h3>
-    <p class="panel-copy">{{ limit }} highest-priority open tasks from canonical memory.</p>
+    <h3>Открытые задачи</h3>
+    <p class="panel-copy">{{ limit }} приоритетных открытых задач из канонической памяти.</p>
   </div>
   <div class="table-shell">
     <table>
       <thead>
         <tr>
-          <th>Title</th>
-          <th>Counterpart</th>
-          <th>Chat</th>
-          <th>Priority</th>
-          <th>Confidence</th>
-          <th>Due</th>
-          <th>Action</th>
+          <th>Заголовок</th>
+          <th>Контакт</th>
+          <th>Чат</th>
+          <th>Приоритет</th>
+          <th>Уверенность</th>
+          <th>Срок</th>
+          <th>Действие</th>
         </tr>
       </thead>
       <tbody>
@@ -24,7 +24,7 @@
         <tr>
           <td>
             <strong>{{ task.title }}</strong>
-            <div class="subtle">{{ task.description or "No description" }}</div>
+            <div class="subtle">{{ task.description or "Без описания" }}</div>
           </td>
           <td>{{ task.counterpart_name or "—" }}</td>
           <td>{{ task.tg_chat_id or "—" }}</td>
@@ -35,13 +35,13 @@
             <form method="post" action="/admin/tasks/{{ task.id }}/status" class="inline-form">
               <input type="hidden" name="status" value="done" />
               <input type="hidden" name="redirect_to" value="/admin/tasks" />
-              <button type="submit" class="button success">Mark done</button>
+              <button type="submit" class="button success">Отметить выполненной</button>
             </form>
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="empty-cell">No open tasks.</td>
+          <td colspan="7" class="empty-cell">Открытых задач нет.</td>
         </tr>
         {% endfor %}
       </tbody>

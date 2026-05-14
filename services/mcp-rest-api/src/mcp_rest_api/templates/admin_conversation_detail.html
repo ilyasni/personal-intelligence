@@ -4,29 +4,29 @@
 <section class="panel detail-hero">
   <div class="detail-head">
     <div>
-      <p class="eyebrow">Conversation Window</p>
-      <h3>{{ detail.chat_title or ("Chat " ~ detail.tg_chat_id) }}</h3>
-      <p class="panel-copy">{{ detail.window_start|datetime }} → {{ detail.window_end|datetime }} · {{ detail.chat_type }} · {{ "%.3f"|format(detail.confidence) }} confidence</p>
+      <p class="eyebrow">Окно диалога</p>
+      <h3>{{ detail.chat_title or ("Чат " ~ detail.tg_chat_id) }}</h3>
+      <p class="panel-copy">{{ detail.window_start|datetime }} → {{ detail.window_end|datetime }} · {{ detail.chat_type|chat_kind_label }} · уверенность {{ "%.3f"|format(detail.confidence) }}</p>
     </div>
     <form method="post" action="/admin/conversations/{{ detail.id }}/reprocess" class="inline-form">
-      <button type="submit" class="button">Queue reprocess</button>
+      <button type="submit" class="button">Запустить повторную обработку</button>
     </form>
   </div>
   <div class="metric-inline">
-    <span>Messages: {{ detail.source_message_ids|length }}</span>
-    <span>Participants: {{ detail.participant_tg_ids|length }}</span>
-    <span>Allowlisted: {{ detail.is_allowed|bool_label }}</span>
+    <span>Сообщений: {{ detail.source_message_ids|length }}</span>
+    <span>Участников: {{ detail.participant_tg_ids|length }}</span>
+    <span>В allowlist: {{ detail.is_allowed|bool_label }}</span>
   </div>
 </section>
 
 <section class="two-column">
   <article class="panel">
     <div class="panel-header">
-      <h3>Summary</h3>
+      <h3>Сводка</h3>
     </div>
     <p>{{ detail.summary }}</p>
     <div class="panel-header compact">
-      <h3>Signals</h3>
+      <h3>Сигналы</h3>
     </div>
     <div class="signal-grid">
       {% for signal in detail.analytics_signals %}
@@ -36,14 +36,14 @@
         <small>{{ signal.summary }}</small>
       </article>
       {% else %}
-      <p class="empty-state">No analytics signals in this window.</p>
+      <p class="empty-state">В этом окне аналитических сигналов нет.</p>
       {% endfor %}
     </div>
   </article>
 
   <article class="panel">
     <div class="panel-header">
-      <h3>Claims</h3>
+      <h3>Утверждения</h3>
     </div>
     <div class="stack-list">
       {% for claim in detail.claims %}
@@ -53,10 +53,10 @@
           <span>{{ "%.3f"|format(claim.confidence) }}</span>
         </div>
         <strong>{{ claim.claim }}</strong>
-        <p>Evidence: {{ claim.evidence_message_ids|join(", ") if claim.evidence_message_ids else "—" }}</p>
+        <p>Основание: {{ claim.evidence_message_ids|join(", ") if claim.evidence_message_ids else "—" }}</p>
       </div>
       {% else %}
-      <p class="empty-state">No structured claims extracted for this window.</p>
+      <p class="empty-state">Для этого окна пока нет структурированных утверждений.</p>
       {% endfor %}
     </div>
   </article>
@@ -65,27 +65,27 @@
 <section class="two-column">
   <article class="panel">
     <div class="panel-header">
-      <h3>Tasks from analysis</h3>
+      <h3>Задачи из анализа</h3>
     </div>
     <div class="stack-list">
       {% for task in detail.tasks %}
       <div class="stack-item">
         <div class="stack-meta">
-          <span>{{ task.status or "open" }}</span>
+          <span>{{ task.status|status_label if task.status else "открыта" }}</span>
           <span>{{ "%.3f"|format(task.confidence) }}</span>
         </div>
         <strong>{{ task.title }}</strong>
-        <p>{{ task.description or "No description" }}</p>
+        <p>{{ task.description or "Без описания" }}</p>
       </div>
       {% else %}
-      <p class="empty-state">No tasks extracted in this window.</p>
+      <p class="empty-state">Из этого окна задачи пока не извлечены.</p>
       {% endfor %}
     </div>
   </article>
 
   <article class="panel">
     <div class="panel-header">
-      <h3>Window features</h3>
+      <h3>Признаки окна</h3>
     </div>
     <pre class="code-block">{{ detail.features|prettyjson }}</pre>
   </article>
@@ -93,7 +93,7 @@
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Messages</h3>
+    <h3>Сообщения</h3>
   </div>
   <div class="stack-list">
     {% for message in detail.messages %}
@@ -102,11 +102,11 @@
         <span>#{{ message.tg_message_id }}</span>
         <span>{{ message.occurred_at|datetime }}</span>
       </div>
-      <strong>{{ message.author_display_name or message.author_tg_user_id or "Unknown author" }}</strong>
+      <strong>{{ message.author_display_name or message.author_tg_user_id or "Неизвестный автор" }}</strong>
       <p>{{ message.text or "—" }}</p>
     </div>
     {% else %}
-    <p class="empty-state">No messages recorded.</p>
+    <p class="empty-state">Сообщения не записаны.</p>
     {% endfor %}
   </div>
 </section>

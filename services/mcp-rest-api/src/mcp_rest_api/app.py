@@ -48,7 +48,30 @@ def _join_values(values: Sequence[str] | None) -> str:
 
 
 def _bool_label(value: bool) -> str:
-    return "yes" if value else "no"
+    return "да" if value else "нет"
+
+
+def _status_label(value: str | None) -> str:
+    mapping = {
+        "open": "открыта",
+        "done": "выполнена",
+        "dropped": "отклонена",
+    }
+    if value is None:
+        return "—"
+    return mapping.get(value, value)
+
+
+def _chat_kind_label(value: str | None) -> str:
+    mapping = {
+        "private": "личный",
+        "group": "группа",
+        "supergroup": "супергруппа",
+        "channel": "канал",
+    }
+    if value is None:
+        return "—"
+    return mapping.get(value, value)
 
 
 def _pretty_json(value: Any) -> str:
@@ -72,20 +95,22 @@ def _normalize_string_list(value: Any) -> list[str]:
 
 
 FLASH_MESSAGES = {
-    "window_requeued": ("success", "Reprocess was queued for this conversation window."),
-    "task_status_done": ("success", "Task status updated to done."),
-    "task_status_open": ("success", "Task status updated to open."),
-    "task_status_dropped": ("warn", "Task status updated to dropped."),
-    "chat_allowed": ("success", "Chat added to allowlist."),
-    "chat_disallowed": ("warn", "Chat removed from allowlist."),
-    "person_blocked": ("warn", "Person was blocked from ingestion and downstream processing."),
-    "person_unblocked": ("success", "Person was unblocked and can flow through ingestion again."),
+    "window_requeued": ("success", "Окно добавлено в очередь на повторную обработку."),
+    "task_status_done": ("success", "Задача переведена в статус «выполнено»."),
+    "task_status_open": ("success", "Задача снова открыта."),
+    "task_status_dropped": ("warn", "Задача переведена в статус «отклонено»."),
+    "chat_allowed": ("success", "Чат добавлен в allowlist."),
+    "chat_disallowed": ("warn", "Чат удалён из allowlist."),
+    "person_blocked": ("warn", "Профиль заблокирован для ingestion и дальнейшей обработки."),
+    "person_unblocked": ("success", "Профиль разблокирован и снова участвует в обработке."),
 }
 
 
 templates.env.filters["datetime"] = _format_datetime
 templates.env.filters["csvish"] = _join_values
 templates.env.filters["bool_label"] = _bool_label
+templates.env.filters["status_label"] = _status_label
+templates.env.filters["chat_kind_label"] = _chat_kind_label
 templates.env.filters["prettyjson"] = _pretty_json
 
 
@@ -136,7 +161,7 @@ def _get_flash_message(request: Request) -> dict[str, str] | None:
     key = request.query_params.get("flash")
     if not key:
         return None
-    level, text = FLASH_MESSAGES.get(key, ("info", "Action completed."))
+    level, text = FLASH_MESSAGES.get(key, ("info", "Действие выполнено."))
     return {"level": level, "text": text}
 
 
@@ -638,7 +663,7 @@ async def admin_overview(request: Request) -> HTMLResponse:
         name="admin_overview.html",
         context=_template_context(
             request,
-            page_title="Control Room",
+            page_title="Пульт",
             current_page="overview",
             overview=overview,
             conversations=conversations,
@@ -656,7 +681,7 @@ async def admin_conversations(request: Request, limit: int = 25) -> HTMLResponse
         name="admin_conversations.html",
         context=_template_context(
             request,
-            page_title="Conversations",
+            page_title="Диалоги",
             current_page="conversations",
             conversations=await get_conversation_data(request.app, limit=limit),
             limit=limit,
@@ -672,7 +697,7 @@ async def admin_conversation_detail(request: Request, window_id: str) -> HTMLRes
         name="admin_conversation_detail.html",
         context=_template_context(
             request,
-            page_title="Conversation Detail",
+            page_title="Карточка окна",
             current_page="conversations",
             detail=detail,
         ),
@@ -694,7 +719,7 @@ async def admin_tasks(request: Request, limit: int = 50) -> HTMLResponse:
         name="admin_tasks.html",
         context=_template_context(
             request,
-            page_title="Tasks",
+            page_title="Задачи",
             current_page="tasks",
             tasks=await get_open_tasks_data(request.app, limit=limit),
             limit=limit,
@@ -720,7 +745,7 @@ async def admin_people(request: Request, limit: int = 50) -> HTMLResponse:
         name="admin_people.html",
         context=_template_context(
             request,
-            page_title="People",
+            page_title="Люди",
             current_page="people",
             people=await get_people_data(request.app, limit=limit),
             limit=limit,
@@ -736,7 +761,7 @@ async def admin_person_detail(request: Request, person_id: str) -> HTMLResponse:
         name="admin_person_detail.html",
         context=_template_context(
             request,
-            page_title="Person Detail",
+            page_title="Карточка профиля",
             current_page="people",
             detail=detail,
         ),
@@ -764,7 +789,7 @@ async def admin_chats(request: Request, limit: int = 50) -> HTMLResponse:
         name="admin_chats.html",
         context=_template_context(
             request,
-            page_title="Chats",
+            page_title="Чаты",
             current_page="chats",
             chats=await get_chat_data(request.app, limit=limit),
             limit=limit,
@@ -780,7 +805,7 @@ async def admin_chat_detail(request: Request, chat_id: str) -> HTMLResponse:
         name="admin_chat_detail.html",
         context=_template_context(
             request,
-            page_title="Chat Detail",
+            page_title="Карточка чата",
             current_page="chats",
             detail=detail,
         ),

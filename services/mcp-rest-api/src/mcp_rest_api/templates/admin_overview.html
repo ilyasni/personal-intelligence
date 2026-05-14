@@ -3,51 +3,51 @@
 {% block content %}
 <section class="hero-grid">
   <article class="metric-card">
-    <span>Analysis windows</span>
+    <span>Окна анализа</span>
     <strong>{{ overview.window_count }}</strong>
-    <small>Recent processed windows in the active lookback.</small>
+    <small>Недавно обработанные окна в активном периоде обзора.</small>
   </article>
   <article class="metric-card">
-    <span>Avg confidence</span>
+    <span>Средняя уверенность</span>
     <strong>{{ "%.3f"|format(overview.avg_confidence) }}</strong>
-    <small>Structured analysis confidence across recent windows.</small>
+    <small>Уверенность структурированного анализа по последним окнам.</small>
   </article>
   <article class="metric-card">
-    <span>Avg messages</span>
+    <span>Среднее число сообщений</span>
     <strong>{{ "%.2f"|format(overview.avg_message_count) }}</strong>
-    <small>Typical size of a synthesized conversation window.</small>
+    <small>Типичный размер синтезированного окна диалога.</small>
   </article>
   <article class="metric-card">
-    <span>Open tasks</span>
+    <span>Открытые задачи</span>
     <strong>{{ overview.open_tasks }}</strong>
-    <small>Unresolved commitments currently tracked.</small>
+    <small>Незакрытые обязательства, которые сейчас отслеживаются.</small>
   </article>
   <article class="metric-card">
-    <span>People</span>
+    <span>Люди</span>
     <strong>{{ overview.people_count }}</strong>
-    <small>Known profiles in canonical Postgres memory.</small>
+    <small>Известные профили в канонической памяти Postgres.</small>
   </article>
   <article class="metric-card">
-    <span>Chats</span>
+    <span>Чаты</span>
     <strong>{{ overview.chat_count }}</strong>
-    <small>Chat entities currently represented in runtime memory.</small>
+    <small>Чат-сущности, которые сейчас есть в runtime-памяти.</small>
   </article>
 </section>
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Signal mix</h3>
-    <a href="/admin/conversations">See conversations</a>
+    <h3>Сигналы</h3>
+    <a href="/admin/conversations">Открыть диалоги</a>
   </div>
   <div class="signal-grid">
     {% for signal in overview.signals %}
     <article class="signal-card">
       <span>{{ signal.signal_kind }}</span>
       <strong>{{ "%.3f"|format(signal.avg_score) }}</strong>
-      <small>{{ signal.samples }} samples</small>
+      <small>{{ signal.samples }} наблюдений</small>
     </article>
     {% else %}
-    <p class="empty-state">No analytics signals yet.</p>
+    <p class="empty-state">Сигналы аналитики пока не появились.</p>
     {% endfor %}
   </div>
 </section>
@@ -55,42 +55,42 @@
 <section class="two-column">
   <article class="panel">
     <div class="panel-header">
-      <h3>Recent conversations</h3>
-      <a href="/admin/conversations">Open full table</a>
+      <h3>Последние диалоги</h3>
+      <a href="/admin/conversations">Открыть полную таблицу</a>
     </div>
     <div class="stack-list">
       {% for item in conversations %}
       <div class="stack-item">
         <div class="stack-meta">
-          <span>Chat {{ item.tg_chat_id }}</span>
+          <span>Чат {{ item.tg_chat_id }}</span>
           <span>{{ item.window_end|datetime }}</span>
         </div>
-        <strong>{{ item.message_count }} messages · {{ "%.3f"|format(item.confidence) }} confidence</strong>
+        <strong>{{ item.message_count }} сообщений · уверенность {{ "%.3f"|format(item.confidence) }}</strong>
         <p>{{ item.summary }}</p>
       </div>
       {% else %}
-      <p class="empty-state">No conversation windows yet.</p>
+      <p class="empty-state">Окон диалогов пока нет.</p>
       {% endfor %}
     </div>
   </article>
 
   <article class="panel">
     <div class="panel-header">
-      <h3>Open tasks</h3>
-      <a href="/admin/tasks">Open task table</a>
+      <h3>Открытые задачи</h3>
+      <a href="/admin/tasks">Открыть таблицу задач</a>
     </div>
     <div class="stack-list">
       {% for task in tasks %}
       <div class="stack-item">
         <div class="stack-meta">
-          <span>{{ task.counterpart_name or "No counterpart" }}</span>
-          <span>{% if task.due_at %}{{ task.due_at|datetime }}{% else %}No due date{% endif %}</span>
+          <span>{{ task.counterpart_name or "Без контакта" }}</span>
+          <span>{% if task.due_at %}{{ task.due_at|datetime }}{% else %}Без дедлайна{% endif %}</span>
         </div>
         <strong>{{ task.title }}</strong>
-        <p>{{ task.description or "No description yet." }}</p>
+        <p>{{ task.description or "Описание пока не заполнено." }}</p>
       </div>
       {% else %}
-      <p class="empty-state">No open tasks.</p>
+      <p class="empty-state">Открытых задач нет.</p>
       {% endfor %}
     </div>
   </article>
@@ -99,8 +99,8 @@
 <section class="two-column">
   <article class="panel">
     <div class="panel-header">
-      <h3>People pulse</h3>
-      <a href="/admin/people">Browse people</a>
+      <h3>Пульс по людям</h3>
+      <a href="/admin/people">Открыть список людей</a>
     </div>
     <div class="stack-list">
       {% for person in people %}
@@ -109,32 +109,32 @@
           <span>{{ person.display_name }}</span>
           <span>{{ person.last_interaction_at|datetime }}</span>
         </div>
-        <strong>@{{ person.username or "unknown" }}</strong>
+        <strong>@{{ person.username or "не указан" }}</strong>
         <p>{{ person.organizations|csvish }} · {{ person.topics|csvish }}</p>
       </div>
       {% else %}
-      <p class="empty-state">No people yet.</p>
+      <p class="empty-state">Профилей пока нет.</p>
       {% endfor %}
     </div>
   </article>
 
   <article class="panel">
     <div class="panel-header">
-      <h3>Chat map</h3>
-      <a href="/admin/chats">Browse chats</a>
+      <h3>Карта чатов</h3>
+      <a href="/admin/chats">Открыть список чатов</a>
     </div>
     <div class="stack-list">
       {% for chat in chats %}
       <div class="stack-item">
         <div class="stack-meta">
-          <span>{{ chat.title or ("Chat " ~ chat.tg_chat_id) }}</span>
+          <span>{{ chat.title or ("Чат " ~ chat.tg_chat_id) }}</span>
           <span>{{ chat.last_window_end|datetime }}</span>
         </div>
-        <strong>{{ chat.kind }} · {{ chat.window_count }} windows</strong>
-        <p>Allowed: {{ chat.is_allowed|bool_label }} · Members: {{ chat.member_count or 0 }}</p>
+        <strong>{{ chat.kind|chat_kind_label }} · {{ chat.window_count }} окон</strong>
+        <p>Разрешён: {{ chat.is_allowed|bool_label }} · Участников: {{ chat.member_count or 0 }}</p>
       </div>
       {% else %}
-      <p class="empty-state">No chats yet.</p>
+      <p class="empty-state">Чатов пока нет.</p>
       {% endfor %}
     </div>
   </article>

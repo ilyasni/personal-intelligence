@@ -204,7 +204,7 @@ def test_admin_overview_renders_dashboard(monkeypatch: pytest.MonkeyPatch) -> No
     with TestClient(app) as client:
         response = client.get("/admin")
     assert response.status_code == 200
-    assert "Control Room" in response.text
+    assert "Пульт" in response.text
     assert "Discussed rollout details." in response.text
     assert "Ship admin UI" in response.text
 
@@ -216,7 +216,7 @@ def test_admin_people_links_context(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 200
     assert "ilyasni" in response.text
     assert "/persons/person-1/context" in response.text
-    assert "Block" in response.text
+    assert "Блокировать" in response.text
 
 
 def test_conversation_detail_renders_messages_and_claims(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -225,7 +225,7 @@ def test_conversation_detail_renders_messages_and_claims(monkeypatch: pytest.Mon
         response = client.get("/admin/conversations/window-1")
     assert response.status_code == 200
     assert "Need to ship admin UI." in response.text
-    assert "Queue reprocess" in response.text
+    assert "Запустить повторную обработку" in response.text
     assert "responsiveness" in response.text
 
 

@@ -3,20 +3,20 @@
 {% block content %}
 <section class="panel">
   <div class="panel-header">
-    <h3>Conversation windows</h3>
-    <p class="panel-copy">{{ limit }} most recent windows with summary and analytics signals.</p>
+    <h3>Окна диалогов</h3>
+    <p class="panel-copy">{{ limit }} последних окон с summary и аналитическими сигналами.</p>
   </div>
   <div class="table-shell">
     <table>
       <thead>
         <tr>
-          <th>Chat</th>
-          <th>Window</th>
-          <th>Messages</th>
-          <th>Confidence</th>
-          <th>Signals</th>
-          <th>Summary</th>
-          <th>Action</th>
+          <th>Чат</th>
+          <th>Окно</th>
+          <th>Сообщения</th>
+          <th>Уверенность</th>
+          <th>Сигналы</th>
+          <th>Сводка</th>
+          <th>Действие</th>
         </tr>
       </thead>
       <tbody>
@@ -31,16 +31,16 @@
               {% for signal in item.signals %}
               <span class="pill">{{ signal.kind }} {{ "%.2f"|format(signal.score) }}</span>
               {% else %}
-              <span class="pill muted">No signals</span>
+              <span class="pill muted">Нет сигналов</span>
               {% endfor %}
             </div>
           </td>
           <td>{{ item.summary }}</td>
-          <td><a class="button ghost" href="/admin/conversations/{{ item.id }}">Inspect</a></td>
+          <td><a class="button ghost" href="/admin/conversations/{{ item.id }}">Открыть</a></td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="empty-cell">No analysis windows available.</td>
+          <td colspan="7" class="empty-cell">Окна анализа пока отсутствуют.</td>
         </tr>
         {% endfor %}
       </tbody>

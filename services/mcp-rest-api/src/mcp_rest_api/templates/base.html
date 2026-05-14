@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PIL Admin · {{ page_title }}</title>
+    <title>PIL Админка · {{ page_title }}</title>
     <link rel="stylesheet" href="{{ static_path }}" />
   </head>
   <body>
@@ -11,18 +11,18 @@
       <aside class="sidebar">
         <div>
           <p class="eyebrow">Personal Intelligence Layer</p>
-          <h1>Control Room</h1>
-          <p class="lede">Operator view for memory, analytics, and live runtime checks.</p>
+          <h1>Пульт</h1>
+          <p class="lede">Операторский интерфейс для памяти, аналитики и проверки живого runtime.</p>
         </div>
         <nav class="nav">
-          <a href="/admin" class="{% if current_page == 'overview' %}active{% endif %}">Overview</a>
-          <a href="/admin/conversations" class="{% if current_page == 'conversations' %}active{% endif %}">Conversations</a>
-          <a href="/admin/tasks" class="{% if current_page == 'tasks' %}active{% endif %}">Tasks</a>
-          <a href="/admin/people" class="{% if current_page == 'people' %}active{% endif %}">People</a>
-          <a href="/admin/chats" class="{% if current_page == 'chats' %}active{% endif %}">Chats</a>
+          <a href="/admin" class="{% if current_page == 'overview' %}active{% endif %}">Обзор</a>
+          <a href="/admin/conversations" class="{% if current_page == 'conversations' %}active{% endif %}">Диалоги</a>
+          <a href="/admin/tasks" class="{% if current_page == 'tasks' %}active{% endif %}">Задачи</a>
+          <a href="/admin/people" class="{% if current_page == 'people' %}active{% endif %}">Люди</a>
+          <a href="/admin/chats" class="{% if current_page == 'chats' %}active{% endif %}">Чаты</a>
         </nav>
         <div class="sidebar-card">
-          <p class="eyebrow">JSON APIs</p>
+          <p class="eyebrow">JSON API</p>
           <a href="/analytics/overview">analytics/overview</a>
           <a href="/analytics/conversations">analytics/conversations</a>
           <a href="/tasks/open">tasks/open</a>
@@ -32,7 +32,7 @@
       <main class="content">
         <header class="page-header">
           <div>
-            <p class="eyebrow">Admin Surface</p>
+            <p class="eyebrow">Админка</p>
             <h2>{{ page_title }}</h2>
           </div>
         </header>
