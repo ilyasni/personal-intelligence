@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import asyncpg
+from maintenance.partitions import create_partition_sql, monthly_partition_specs
 from pil_observability import get_logger
 
-from maintenance.partitions import PARTITIONED_TABLES, create_partition_sql, monthly_partition_specs
+if TYPE_CHECKING:
+    import asyncpg
 
 log = get_logger("maintenance.jobs")
+
 
 async def ensure_runtime_defaults(
     conn: asyncpg.Connection,

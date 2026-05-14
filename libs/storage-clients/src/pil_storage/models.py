@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models — source of truth for Postgres schema."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     ARRAY,
@@ -14,7 +14,6 @@ from sqlalchemy import (
     Integer,
     Numeric,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -28,7 +27,7 @@ def _uuid4() -> uuid.UUID:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):

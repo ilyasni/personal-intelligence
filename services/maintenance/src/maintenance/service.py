@@ -1,12 +1,13 @@
 import asyncio
 import signal
+from contextlib import suppress
 
 import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from pil_observability import get_logger
 
 from maintenance.jobs import run_maintenance
 from maintenance.settings import settings
+from pil_observability import get_logger
 
 log = get_logger("maintenance.service")
 
@@ -65,7 +66,5 @@ def _install_signal_handlers(stop_event: asyncio.Event) -> None:
         sig = getattr(signal, signame, None)
         if sig is None:
             continue
-        try:
+        with suppress(NotImplementedError):
             loop.add_signal_handler(sig, stop_event.set)
-        except NotImplementedError:
-            pass

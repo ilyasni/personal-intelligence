@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 PARTITIONED_TABLES: dict[str, str] = {
     "interaction": "created_at",
@@ -45,7 +44,7 @@ def monthly_partition_specs(
 
 def month_start(dt: datetime) -> datetime:
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
@@ -62,4 +61,3 @@ def create_partition_sql(spec: PartitionSpec) -> str:
         f"CREATE TABLE IF NOT EXISTS {spec.name} PARTITION OF {spec.table} "
         f"FOR VALUES FROM ('{start}') TO ('{end}')"
     )
-

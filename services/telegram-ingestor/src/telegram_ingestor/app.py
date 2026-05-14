@@ -7,7 +7,6 @@ from fastapi import FastAPI
 
 from pil_observability import get_logger
 from pil_storage import RedisClient, S3Client
-
 from telegram_ingestor.handlers import router
 from telegram_ingestor.pil_aiohttp_session import PilAiohttpSession
 from telegram_ingestor.settings import settings

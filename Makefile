@@ -1,8 +1,11 @@
 COMPOSE_DIR := infra/compose
 COMPOSE     := docker compose -f $(COMPOSE_DIR)/docker-compose.yml --env-file $(COMPOSE_DIR)/.env
+CANONICAL_PY_DIRS := libs/contracts libs/llm-client libs/observability libs/storage-clients \
+	services/telegram-ingestor services/ai-orchestrator services/memory-projector \
+	services/embedding-indexer services/mcp-rest-api services/maintenance
 
 .PHONY: help deps up down logs ps smoke smoke-wait smoke-strict cutover-audit cutover-cleanup \
-        verify lint fmt typecheck install install-dev pre-commit-install nuke
+        verify lint lint-runtime fmt typecheck install install-dev pre-commit-install nuke
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 help:
@@ -23,6 +26,7 @@ help:
 	@echo "    install     — установить все зависимости (все libs + services)"
 	@echo "    install-dev — установить dev-зависимости (ruff, mypy, pytest)"
 	@echo "    lint        — ruff check"
+	@echo "    lint-runtime — ruff check по canonical runtime"
 	@echo "    fmt         — ruff format"
 	@echo "    typecheck   — mypy"
 	@echo "    verify      — lint + typecheck + test"
@@ -95,6 +99,9 @@ migrate-status:
 
 lint:
 	ruff check libs/ services/
+
+lint-runtime:
+	ruff check $(CANONICAL_PY_DIRS)
 
 fmt:
 	ruff format libs/ services/

@@ -1,6 +1,6 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import AsyncGenerator
 
 import aiobotocore.session
 from botocore.config import Config as BotoConfig
@@ -24,7 +24,7 @@ class S3Client:
         return bool(self.access_key_id and self.secret_access_key and self.bucket_raw and self.bucket_media)
 
     @asynccontextmanager
-    async def _client(self) -> AsyncGenerator:
+    async def _client(self) -> AsyncGenerator[object, None]:
         session = aiobotocore.session.get_session()
         async with session.create_client(
             "s3",

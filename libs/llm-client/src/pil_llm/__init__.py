@@ -5,7 +5,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping
+from typing import Any, Literal
 
 import httpx
 from openai import AsyncOpenAI
@@ -142,7 +142,7 @@ class OpenAICompatChatClient:
         max_connections: int = 10,
         max_keepalive_connections: int = 5,
         max_retries: int = 2,
-        default_headers: Mapping[str, str] | None = None,
+        default_headers: dict[str, str] | None = None,
     ) -> None:
         self._service_name = service_name
         self._api_key = str(api_key or "").strip()

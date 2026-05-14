@@ -1,7 +1,7 @@
-"""aiogram handlers для Business Bot update types."""
+"""aiogram handlers for Business Bot update types."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from aiogram import Router
@@ -55,18 +55,22 @@ async def on_business_message(
         message_id=message.message_id,
         from_user=message.from_user.id if message.from_user else None,
     )
-    # Сохраняем raw в S3
+    # Persist the raw Telegram payload in S3 when storage is configured.
     raw_key = _s3_key(message.chat.id, message.message_id, message.date)
     if s3.is_configured:
         try:
             await s3.put_raw(raw_key, _serialize_message_json(message))
         except Exception:
             log.warning("s3_put_failed", key=raw_key, exc_info=True)
-            raw_key = None  # не блокируем pipeline если S3 недоступен
+            raw_key = None  # Do not block the pipeline when object storage is unavailable.
     else:
         raw_key = None
 
-    chat_type = message.chat.type if isinstance(message.chat.type, str) else (message.chat.type.value if message.chat.type else "private")
+    chat_type = (
+        message.chat.type
+        if isinstance(message.chat.type, str)
+        else (message.chat.type.value if message.chat.type else "private")
+    )
 
     contract = TelegramMessageEvent(
         tg_chat_id=message.chat.id,
@@ -120,7 +124,7 @@ async def on_deleted_business_messages(
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _s3_key(chat_id: int, message_id: int, dt: datetime | None) -> str:
-    ts = dt or datetime.now(timezone.utc)
+    ts = dt or datetime.now(UTC)
     return f"{ts.year}/{ts.month:02d}/{ts.day:02d}/{chat_id}/{message_id}.json"
 
 

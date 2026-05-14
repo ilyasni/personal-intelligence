@@ -62,7 +62,8 @@
 - GitHub Actions `ci.yml` обязателен зелёный для merge.
 - Локально перед отправкой всё ещё ожидается `make verify`.
 - Coverage upload появится в следующей итерации CI.
-- `ruff`/`mypy` пока не включены в обязательный GitHub gate из-за текущего static-analysis debt; CI вернёт их после отдельной cleanup-итерации.
+- `ruff` уже включён в обязательный GitHub gate для canonical runtime через `make lint-runtime`.
+- `mypy` пока не включён в обязательный GitHub gate из-за текущего static-analysis debt; CI вернёт его после отдельной cleanup-итерации.
 - Security — `pip-audit`, `safety`, `npm audit`, `trivy` для image — CI fail на high-severity без override.
 
 ## Data fixtures

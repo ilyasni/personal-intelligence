@@ -1,9 +1,8 @@
 import asyncio
 
-from pil_observability import configure_logging
-
 from maintenance.service import run
 from maintenance.settings import settings
+from pil_observability import configure_logging
 
 
 async def main() -> None:

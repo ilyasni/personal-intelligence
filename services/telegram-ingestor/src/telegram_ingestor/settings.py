@@ -8,9 +8,9 @@ class Settings(BaseSettings):
     bot_token: str
 
     # Webhook
-    webhook_base_url: str = ""     # optional in polling mode; e.g. https://pil.example.com
+    webhook_base_url: str = ""  # Optional in polling mode; e.g. https://pil.example.com
     webhook_path: str = "/tg/webhook"
-    webhook_secret: str = ""       # X-Telegram-Bot-Api-Secret-Token
+    webhook_secret: str = ""  # X-Telegram-Bot-Api-Secret-Token
 
     # Redis
     redis_url: str = "redis://redis:6379/0"
@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     # Postgres
     postgres_dsn: str = "postgresql+asyncpg://pil:pil@postgres:5432/pil"
 
-    # Proxy for Telegram API (e.g. http://xray:8080 или socks5://xray:10808 — иногда стабильнее CONNECT)
+    # Proxy for Telegram API (for example http://xray:8080 or socks5://xray:10808).
     tg_proxy_url: str = ""
-    # Таймаут HTTP к Bot API (aiogram BaseSession); через Reality+CONNECT может быть >60 с
+    # Bot API HTTP timeout; CONNECT-based proxy chains may require more than 60 seconds.
     tg_api_timeout_seconds: float = 120.0
 
     # Service

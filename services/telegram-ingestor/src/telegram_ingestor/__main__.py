@@ -3,7 +3,6 @@ import asyncio
 import uvicorn
 
 from pil_observability import configure_logging, get_logger
-
 from telegram_ingestor.app import create_app, ensure_polling_mode
 from telegram_ingestor.settings import settings
 
