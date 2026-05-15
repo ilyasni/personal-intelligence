@@ -207,6 +207,7 @@ def test_analytics_redirects_to_admin(monkeypatch: pytest.MonkeyPatch) -> None:
         response = client.get("/analytics", follow_redirects=False)
     assert response.status_code == 307
     assert response.headers["location"] == "/admin"
+    assert response.headers["cache-control"].startswith("no-store")
 
 
 def test_root_redirects_to_admin(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -215,6 +216,7 @@ def test_root_redirects_to_admin(monkeypatch: pytest.MonkeyPatch) -> None:
         response = client.get("/", follow_redirects=False)
     assert response.status_code == 307
     assert response.headers["location"] == "/admin"
+    assert response.headers["cache-control"].startswith("no-store")
 
 
 def test_admin_overview_renders_dashboard(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -222,9 +224,18 @@ def test_admin_overview_renders_dashboard(monkeypatch: pytest.MonkeyPatch) -> No
     with TestClient(app) as client:
         response = client.get("/admin")
     assert response.status_code == 200
+    assert response.headers["cache-control"].startswith("no-store")
     assert "Пульт" in response.text
     assert "Discussed rollout details." in response.text
     assert "Ship admin UI" in response.text
+
+
+def test_admin_overview_uses_versioned_static_asset(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.get("/admin")
+    assert response.status_code == 200
+    assert "/static/admin.css?v=" in response.text
 
 
 def test_admin_people_links_context(monkeypatch: pytest.MonkeyPatch) -> None:

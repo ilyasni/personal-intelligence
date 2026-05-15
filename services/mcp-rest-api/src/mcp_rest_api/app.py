@@ -32,6 +32,7 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter()
+STATIC_ASSET_VERSION = str(int((STATIC_DIR / "admin.css").stat().st_mtime))
 
 
 def _format_datetime(value: datetime | str | None) -> str:
@@ -183,7 +184,7 @@ def _template_context(
         "request": request,
         "page_title": page_title,
         "current_page": current_page,
-        "static_path": str(request.url_for("static", path="admin.css")),
+        "static_path": f"{request.url_for('static', path='admin.css')}?v={STATIC_ASSET_VERSION}",
         "flash": _get_flash_message(request),
         **extra,
     }
@@ -199,7 +200,30 @@ def _get_flash_message(request: Request) -> dict[str, str] | None:
 
 def _redirect_with_flash(path: str, flash_key: str) -> RedirectResponse:
     separator = "&" if "?" in path else "?"
-    return RedirectResponse(url=f"{path}{separator}flash={quote(flash_key)}", status_code=303)
+    response = RedirectResponse(url=f"{path}{separator}flash={quote(flash_key)}", status_code=303)
+    _apply_admin_no_cache_headers(response)
+    return response
+
+
+def _apply_admin_no_cache_headers(response: HTMLResponse | RedirectResponse) -> None:
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
+
+def _admin_template_response(
+    request: Request,
+    *,
+    name: str,
+    context: dict[str, Any],
+) -> HTMLResponse:
+    response = templates.TemplateResponse(
+        request=request,
+        name=name,
+        context=context,
+    )
+    _apply_admin_no_cache_headers(response)
+    return response
 
 
 async def get_open_tasks_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
@@ -723,12 +747,16 @@ async def reprocess_window(request: Request, window_id: str) -> dict[str, str]:
 
 @router.get("/analytics", response_class=HTMLResponse, include_in_schema=False)
 async def analytics_ui_alias() -> RedirectResponse:
-    return RedirectResponse(url="/admin", status_code=307)
+    response = RedirectResponse(url="/admin", status_code=307)
+    _apply_admin_no_cache_headers(response)
+    return response
 
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def admin_root_alias() -> RedirectResponse:
-    return RedirectResponse(url="/admin", status_code=307)
+    response = RedirectResponse(url="/admin", status_code=307)
+    _apply_admin_no_cache_headers(response)
+    return response
 
 
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)
@@ -740,8 +768,8 @@ async def admin_overview(request: Request) -> HTMLResponse:
         get_people_data(request.app, limit=6),
         get_chat_data(request.app, limit=6),
     )
-    return templates.TemplateResponse(
-        request=request,
+    return _admin_template_response(
+        request,
         name="admin_overview.html",
         context=_template_context(
             request,
@@ -758,8 +786,8 @@ async def admin_overview(request: Request) -> HTMLResponse:
 
 @router.get("/admin/conversations", response_class=HTMLResponse, include_in_schema=False)
 async def admin_conversations(request: Request, limit: int = 25) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request=request,
+    return _admin_template_response(
+        request,
         name="admin_conversations.html",
         context=_template_context(
             request,
@@ -774,8 +802,8 @@ async def admin_conversations(request: Request, limit: int = 25) -> HTMLResponse
 @router.get("/admin/conversations/{window_id}", response_class=HTMLResponse, include_in_schema=False)
 async def admin_conversation_detail(request: Request, window_id: str) -> HTMLResponse:
     detail = await get_conversation_detail_data(request.app, window_id)
-    return templates.TemplateResponse(
-        request=request,
+    return _admin_template_response(
+        request,
         name="admin_conversation_detail.html",
         context=_template_context(
             request,
@@ -796,8 +824,8 @@ async def admin_reprocess_window(request: Request, window_id: str) -> RedirectRe
 
 @router.get("/admin/tasks", response_class=HTMLResponse, include_in_schema=False)
 async def admin_tasks(request: Request, limit: int = 50) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request=request,
+    return _admin_template_response(
+        request,
         name="admin_tasks.html",
         context=_template_context(
             request,
@@ -822,8 +850,8 @@ async def admin_task_status(
 
 @router.get("/admin/people", response_class=HTMLResponse, include_in_schema=False)
 async def admin_people(request: Request, limit: int = 50, manual_tag: str | None = None) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request=request,
+    return _admin_template_response(
+        request,
         name="admin_people.html",
         context=_template_context(
             request,
@@ -839,8 +867,8 @@ async def admin_people(request: Request, limit: int = 50, manual_tag: str | None
 @router.get("/admin/people/{person_id}", response_class=HTMLResponse, include_in_schema=False)
 async def admin_person_detail(request: Request, person_id: str) -> HTMLResponse:
     detail = await get_person_detail_data(request.app, person_id)
-    return templates.TemplateResponse(
-        request=request,
+    return _admin_template_response(
+        request,
         name="admin_person_detail.html",
         context=_template_context(
             request,
@@ -882,8 +910,8 @@ async def admin_person_annotations(
 
 @router.get("/admin/chats", response_class=HTMLResponse, include_in_schema=False)
 async def admin_chats(request: Request, limit: int = 50) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request=request,
+    return _admin_template_response(
+        request,
         name="admin_chats.html",
         context=_template_context(
             request,
@@ -898,8 +926,8 @@ async def admin_chats(request: Request, limit: int = 50) -> HTMLResponse:
 @router.get("/admin/chats/{chat_id}", response_class=HTMLResponse, include_in_schema=False)
 async def admin_chat_detail(request: Request, chat_id: str) -> HTMLResponse:
     detail = await get_chat_detail_data(request.app, chat_id)
-    return templates.TemplateResponse(
-        request=request,
+    return _admin_template_response(
+        request,
         name="admin_chat_detail.html",
         context=_template_context(
             request,
