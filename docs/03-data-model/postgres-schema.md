@@ -47,7 +47,7 @@ CREATE INDEX idx_chat_is_allowed ON chat(is_allowed) WHERE is_allowed = TRUE;
 ```
 
 ### `person`
-Профиль контакта (или владельца).
+Профиль внешнего контакта. В переходном runtime owner ещё может временно опираться на backing record с `is_owner = TRUE`, но это compatibility layer, а не целевая модель.
 ```sql
 CREATE TABLE person (
   id              UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -74,6 +74,12 @@ CREATE INDEX idx_person_topics_gin ON person USING GIN(topics);
 CREATE INDEX idx_person_organizations_gin ON person USING GIN(organizations);
 CREATE INDEX idx_person_manual_tags_gin ON person USING GIN(manual_tags);
 ```
+
+Целевое направление:
+
+- `person` — только external people;
+- owner — отдельный `owner_profile`;
+- ручной контекст владельца относительно конкретного человека или чата — отдельная сущность `relationship_annotation`, а не самоописание owner как контакта.
 
 ### `chat_membership`
 Кто в каком чате.

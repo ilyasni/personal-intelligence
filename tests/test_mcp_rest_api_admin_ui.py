@@ -24,6 +24,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
             "avg_message_count": 12.5,
             "open_tasks": 2,
             "people_count": 3,
+            "owner_profile_count": 1,
             "chat_count": 4,
             "signals": [{"signal_kind": "responsiveness", "avg_score": 0.66, "samples": 5}],
         }
@@ -71,6 +72,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
                 "trust_score": 0.93,
                 "last_interaction_at": "2026-05-14 08:20",
                 "blocked": False,
+                "is_owner": False,
             }
         ]
 
@@ -144,6 +146,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
                 "manual_tags": ["коллега", "pet-проект"],
                 "notes": "Основной контакт по проекту.",
                 "blocked": False,
+                "is_owner": False,
             },
             "recent_windows": [{"id": "window-1", "summary": "Discussed rollout details.", "window_end": "2026-05-14 08:15"}],
             "tasks": [{"title": "Ship admin UI", "description": "Finish operator screens", "status": "open", "due_at": "2026-05-15 10:00"}],
@@ -151,6 +154,35 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
             "semantic_memory": [{"kind": "analysis_window", "summary": "Discussed rollout details."}],
             "graph_neighbors_status": "ok",
             "semantic_memory_status": "ok",
+        }
+
+    async def fake_owner_profile(_app: Any) -> dict[str, Any]:
+        return {
+            "person": {
+                "id": "owner-1",
+                "username": "ilyasni",
+                "display_name": "Ilya",
+                "last_interaction_at": "2026-05-14 08:20",
+                "topics": ["работа", "pil", "память"],
+                "topics_preview": ["работа", "pil", "память"],
+                "topics_hidden_count": 0,
+                "organizations": ["PIL"],
+                "organizations_preview": ["PIL"],
+                "organizations_hidden_count": 0,
+                "manual_tags": [],
+                "manual_tags_preview": [],
+                "manual_tags_hidden_count": 0,
+                "notes": None,
+                "blocked": False,
+                "is_owner": True,
+            },
+            "recent_windows": [{"id": "window-1", "summary": "Discussed rollout details.", "window_end": "2026-05-14 08:15"}],
+            "tasks": [{"title": "Ship admin UI", "description": "Finish operator screens", "status": "open", "due_at": "2026-05-15 10:00"}],
+            "graph_neighbors": [],
+            "semantic_memory": [],
+            "graph_neighbors_status": "ok",
+            "semantic_memory_status": "ok",
+            "owner_profile_mode": True,
         }
 
     async def fake_chat_detail(_app: Any, chat_id: str) -> dict[str, Any]:
@@ -195,7 +227,9 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(mcp_app, "get_chat_data", fake_chats)
     monkeypatch.setattr(mcp_app, "get_conversation_detail_data", fake_conversation_detail)
     monkeypatch.setattr(mcp_app, "get_person_detail_data", fake_person_detail)
+    monkeypatch.setattr(mcp_app, "get_owner_profile_data", fake_owner_profile)
     monkeypatch.setattr(mcp_app, "get_chat_detail_data", fake_chat_detail)
+    monkeypatch.setattr(mcp_app, "get_owner_person_id", lambda _app: mcp_app.asyncio.sleep(0, result="owner-1"))
     monkeypatch.setattr(mcp_app, "update_task_status", fake_update_task_status)
     monkeypatch.setattr(mcp_app, "set_chat_allowlist", fake_set_chat_allowlist)
     monkeypatch.setattr(mcp_app, "set_person_blocked", fake_set_person_blocked)
@@ -250,6 +284,50 @@ def test_admin_people_links_context(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "коллега" in response.text
     assert "/persons/person-1/context" in response.text
     assert "Блокировать" in response.text
+    assert "раздел" in response.text
+    assert "/admin/me" in response.text
+
+
+def test_admin_me_renders_owner_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.get("/admin/me")
+    assert response.status_code == 200
+    assert "Профиль владельца" in response.text
+    assert "first-party" in response.text
+    assert "Ilya" in response.text
+
+
+def test_owner_person_route_redirects_to_admin_me(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _state = _build_app(monkeypatch)
+
+    async def fake_owner_person_detail(_app: Any, person_id: str) -> dict[str, Any]:
+        return {
+            "person": {
+                "id": person_id,
+                "username": "ilyasni",
+                "display_name": "Ilya",
+                "last_interaction_at": "2026-05-14 08:20",
+                "topics": [],
+                "organizations": [],
+                "manual_tags": [],
+                "notes": None,
+                "blocked": False,
+                "is_owner": True,
+            },
+            "recent_windows": [],
+            "tasks": [],
+            "graph_neighbors": [],
+            "semantic_memory": [],
+            "graph_neighbors_status": "ok",
+            "semantic_memory_status": "ok",
+        }
+
+    monkeypatch.setattr(mcp_app, "get_person_detail_data", fake_owner_person_detail)
+    with TestClient(app) as client:
+        response = client.get("/admin/people/owner-1", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"] == "/admin/me"
 
 
 def test_person_detail_shows_degraded_notices(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -350,6 +428,23 @@ def test_person_annotations_post_redirects(monkeypatch: pytest.MonkeyPatch) -> N
     assert state["person_annotation_updates"] == [
         ("person-1", ["коллега", "pet-проект", "семья"], "Лучше писать вечером.")
     ]
+
+
+def test_owner_annotations_post_redirects_to_admin_me(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.post(
+            "/admin/people/owner-1/annotations",
+            data={
+                "manual_tags": "работа",
+                "notes": "test",
+                "redirect_to": "/admin/people/owner-1",
+            },
+            follow_redirects=False,
+        )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/me?flash=owner_profile_readonly"
+    assert state["person_annotation_updates"] == []
 
 
 def test_person_detail_progressive_disclosure_helpers() -> None:

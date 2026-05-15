@@ -3,6 +3,11 @@
 {% block content %}
 <section class="hero-grid">
   <article class="metric-card">
+    <span>Мой профиль</span>
+    <strong>{{ owner_profile.person.display_name }}</strong>
+    <small>First-party профиль владельца. Его контекст подаётся в анализ отдельно от внешних персон.</small>
+  </article>
+  <article class="metric-card">
     <span>Окна анализа</span>
     <strong>{{ overview.window_count }}</strong>
     <small>Недавно обработанные окна в активном периоде обзора.</small>
@@ -32,6 +37,26 @@
     <strong>{{ overview.chat_count }}</strong>
     <small>Чат-сущности, которые сейчас есть в runtime-памяти.</small>
   </article>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h3>Контекст владельца</h3>
+    <a href="/admin/me">Открыть мой профиль</a>
+  </div>
+  <div class="stack-list">
+    <div class="stack-item">
+      <div class="stack-meta">
+        <span>@{{ owner_profile.person.username or "не указан" }}</span>
+        <span>{{ owner_profile.person.last_interaction_at|datetime }}</span>
+      </div>
+      <strong>{{ owner_profile.person.display_name }}</strong>
+      <p>
+        Темы: {{ owner_profile.person.topics_preview|csvish }}
+        {% if owner_profile.person.topics_hidden_count %}+ ещё {{ owner_profile.person.topics_hidden_count }}{% endif %}
+      </p>
+    </div>
+  </div>
 </section>
 
 <section class="panel">

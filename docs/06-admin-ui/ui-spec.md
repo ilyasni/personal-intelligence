@@ -17,9 +17,10 @@ Web SPA для владельца инсталляции. Один пользо�
 ```
 /
 ├── /dashboard            (главная: подключения, очереди, последние tasks/persons)
+├── /me                   (first-party профиль владельца)
 ├── /connections          (привязка ботов, allowlist чатов)
 ├── /persons
-│   ├── /persons          (список + фильтры)
+│   ├── /persons          (список + фильтры, только external people)
 │   └── /persons/:id      (карточка)
 ├── /chats
 │   ├── /chats            (список + allowlist)
@@ -63,11 +64,22 @@ Web SPA для владельца инсталляции. Один пользо�
 
 ### Persons list
 - Поиск (q), фильтры (topic, organization).
+- Owner profile здесь не показывается и открывается отдельно через `/me`.
 - Колонки: avatar, display_name, role, last_interaction, trust_score, open tasks.
 - Cursor pagination.
 
+### My profile
+- First-party раздел владельца инсталляции.
+- Не трактуется как ordinary person card.
+- Содержит:
+  - стабильный owner context;
+  - рабочие/личные сегменты;
+  - recent windows, в которых owner участвовал;
+  - explainable note, что этот профиль влияет на анализ людей, чатов и задач.
+
 ### Person card
 - Header: avatar, display_name, username, action menu (erase, export, block).
+- Эта карточка применяется только к external people.
 - Operator annotations panel:
   - editable `manual tags` for segmentation, for example `коллега`, `супруга`, `пет-проект`, `семья`, `клиент`;
   - free-form `owner note`, where владелец может оставить комментарий или контекст;

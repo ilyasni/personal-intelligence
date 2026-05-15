@@ -22,6 +22,8 @@ flowchart LR
 - **Telegram** — источник событий и канал интеграции.
 - **External LLMs / MCP clients** — потребители памяти и retrieval.
 
+Важно: owner в целевой модели — это first-party principal, а не ordinary запись в списке внешних персон.
+
 ## Что уже реально поднято
 
 На сервере уже работают:
@@ -108,6 +110,7 @@ flowchart TD
 - **Event-driven core.** Сервисы общаются через streams и storage, а не через RPC-цепочки.
 - **Deterministic persistence.** LLM не пишет в базы напрямую.
 - **Canonical-first storage.** Postgres — truth, остальное — projections.
+- **First-party owner context.** Сообщения и устойчивые настройки владельца влияют на анализ людей, чатов и задач как отдельный context layer.
 - **Grounded retrieval.** API сначала ищет факты, потом синтезирует ответ.
 - **Policy-driven LLM usage.** Provider routing и embeddings profile — отдельный управляемый слой.
 

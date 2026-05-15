@@ -5,7 +5,7 @@
   <div class="panel-header">
     <div>
       <h3>Люди</h3>
-      <p class="panel-copy">{{ limit }} последних активных профилей из канонической памяти.</p>
+      <p class="panel-copy">{{ limit }} последних активных внешних профилей из канонической памяти.</p>
     </div>
     <form method="get" action="/admin/people" class="filter-form">
       <input
@@ -25,6 +25,9 @@
     <span class="pill">Фильтр: {{ active_manual_tag }}</span>
   </div>
   {% endif %}
+  <p class="inline-note">
+    Профиль владельца вынесен в отдельный раздел <a href="/admin/me">«Я»</a> и не смешивается со списком внешних персон.
+  </p>
   <div class="table-shell">
     <table>
       <thead>

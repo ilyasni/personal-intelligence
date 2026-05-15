@@ -41,6 +41,12 @@
 6. **Для embeddings активен только один профиль за раз.**
    Multi-provider embeddings допустимы только при гарантированной совместимости dimension/profile/version.
 
+7. **Owner identity отделяется от contact memory.**
+   Владелец инстанса не моделируется как ordinary external person. Его сообщения и устойчивые настройки образуют first-party context layer, который влияет на анализ людей, чатов, задач и retrieval.
+
+8. **Owner context обновляется по meaningful-change модели.**
+   First-party профиль не должен переписываться на каждое сообщение в hot path. Быстрый контекст живёт на уровне окна/диалога, а стабильный owner profile обновляется через consolidation.
+
 ## Целевая структура сервисов
 
 | Сервис | Роль | Использует LLM |
@@ -205,12 +211,20 @@ PIL должен использовать routing не "по сервису", а
 
 **Postgres** хранит:
 
+- `owner_profile`
 - `message` / `interaction_window`
 - `person`
+- `relationship_annotation`
 - `task`
 - `mention` / `topic` / `relationship_hint`
 - `processed_event`
 - `audit_log`
+
+Где:
+
+- `owner_profile` — first-party identity, preferences, language, stable personal/work segmentation;
+- `person` — только external people;
+- `relationship_annotation` — контекст владельца относительно конкретного человека или чата, например `коллега`, `семья`, `pet-project`, `frontend`.
 
 ### Derived
 
@@ -239,6 +253,8 @@ PIL должен использовать routing не "по сервису", а
 - `embedding_profile`
 - `schema_version`
 
+`owner_id` здесь относится к first-party principal, а не к external person row.
+
 **S3**
 
 - raw Telegram payloads;
@@ -252,7 +268,7 @@ PIL должен использовать routing не "по сервису", а
 ### Retrieval plan
 
 1. SQL layer:
-   persona, open tasks, latest interactions, explicit facts.
+   owner profile, relationship annotations, open tasks, latest interactions, explicit facts.
 2. Qdrant layer:
    semantic retrieval по dense/hybrid search с payload filters.
 3. Neo4j layer:
@@ -281,6 +297,12 @@ LLM в API-слое не должен сам ходить "в глубину" б
 - runtime observability для LLM calls;
 - gradual rollout и shadow mode.
 
+### Из внешних identity patterns
+
+- `people/me` vs `contacts`: first-party owner и внешние люди не должны быть одним классом сущностей;
+- operator-authored relationship context лучше хранить отдельно от inferred persona;
+- self-memory и contact-memory нельзя смешивать в один список профилей без ухудшения retrieval и сегментации.
+
 ## Переходный план
 
 | Текущее состояние | Целевое состояние |
@@ -291,6 +313,13 @@ LLM в API-слое не должен сам ходить "в глубину" б
 | `chat-summarizer` | summarization входит в `ai-orchestrator` |
 | `memory-distiller` | заменяется `embedding-indexer` с profile-aware indexing |
 | `graph-builder` | отдельный сервис не нужен; graph projection делает `memory-projector` |
+
+### Identity reset
+
+1. Вынести owner UX в отдельный `/admin/me`.
+2. Убрать owner из основного списка `/admin/people`.
+3. Оставить `person.is_owner` только как transitional backing record для совместимости пайплайна.
+4. Позже ввести canonical `owner_profile` и `relationship_annotation` как отдельные Postgres-сущности.
 
 ## Что считать финальной структурой v1
 

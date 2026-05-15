@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 import asyncpg
 from fastapi import APIRouter, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from neo4j import AsyncGraphDatabase
@@ -186,6 +186,7 @@ FLASH_MESSAGES = {
     "person_blocked": ("warn", "Профиль заблокирован для ingestion и дальнейшей обработки."),
     "person_unblocked": ("success", "Профиль разблокирован и снова участвует в обработке."),
     "person_annotations_saved": ("success", "Теги и комментарий сохранены."),
+    "owner_profile_readonly": ("info", "Профиль владельца вынесен в отдельный first-party раздел и не редактируется как обычная персона."),
 }
 
 
@@ -331,7 +332,14 @@ async def get_analytics_overview_data(app: FastAPI, days: int = 14) -> dict[str,
             WHERE status = 'open'
             """
         )
-        people = await conn.fetchrow("SELECT count(*)::int AS people_count FROM person")
+        people = await conn.fetchrow(
+            """
+            SELECT
+                count(*) FILTER (WHERE is_owner = FALSE)::int AS people_count,
+                count(*) FILTER (WHERE is_owner = TRUE)::int AS owner_profile_count
+            FROM person
+            """
+        )
         chats = await conn.fetchrow("SELECT count(*)::int AS chat_count FROM chat")
     return {
         "window_count": int(summary["window_count"] or 0),
@@ -339,6 +347,7 @@ async def get_analytics_overview_data(app: FastAPI, days: int = 14) -> dict[str,
         "avg_message_count": float(summary["avg_message_count"] or 0.0),
         "open_tasks": int(unresolved["open_tasks"] or 0),
         "people_count": int(people["people_count"] or 0),
+        "owner_profile_count": int(people["owner_profile_count"] or 0),
         "chat_count": int(chats["chat_count"] or 0),
         "signals": [dict(row) for row in signals],
     }
@@ -397,6 +406,7 @@ async def get_people_data(
     limit: int = 50,
     *,
     manual_tag: str | None = None,
+    include_owner: bool = False,
 ) -> list[dict[str, Any]]:
     pool: asyncpg.Pool = app.state.db_pool
     normalized_manual_tag = _normalize_optional_text(manual_tag)
@@ -414,14 +424,17 @@ async def get_people_data(
                 communication_style,
                 trust_score::float AS trust_score,
                 last_interaction_at,
-                blocked
+                blocked,
+                is_owner
             FROM person
-            WHERE $2::text IS NULL OR $2 = ANY(manual_tags)
+            WHERE ($2::text IS NULL OR $2 = ANY(manual_tags))
+              AND ($3::bool OR is_owner = FALSE)
             ORDER BY COALESCE(last_interaction_at, updated_at) DESC NULLS LAST, created_at DESC
             LIMIT $1
             """,
             limit,
             normalized_manual_tag,
+            include_owner,
         )
     items = [dict(row) for row in rows]
     for item in items:
@@ -429,6 +442,23 @@ async def get_people_data(
         item["topics"] = _normalize_string_list(item.get("topics"))
         item["manual_tags"] = _normalize_string_list(item.get("manual_tags"))
     return items
+
+
+async def get_owner_person_id(app: FastAPI) -> str:
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id
+            FROM person
+            WHERE is_owner = TRUE
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail="owner_profile_not_found")
+    return str(row["id"])
 
 
 async def get_chat_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
@@ -592,6 +622,13 @@ async def get_chat_detail_data(app: FastAPI, chat_id: str) -> dict[str, Any]:
     }
 
 
+async def get_owner_profile_data(app: FastAPI) -> dict[str, Any]:
+    owner_person_id = await get_owner_person_id(app)
+    detail = await get_person_detail_data(app, owner_person_id)
+    detail["owner_profile_mode"] = True
+    return detail
+
+
 async def update_task_status(app: FastAPI, task_id: str, *, status: str) -> None:
     if status not in {"open", "done", "dropped"}:
         raise HTTPException(status_code=400, detail="invalid_task_status")
@@ -686,14 +723,15 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
                 display_name,
                 topics,
                 organizations,
-                manual_tags,
-                notes,
-                last_interaction_at,
-                blocked
-            FROM person
-            WHERE id = $1::uuid
-            """,
-            person_id,
+            manual_tags,
+            notes,
+            last_interaction_at,
+            blocked,
+            is_owner
+        FROM person
+        WHERE id = $1::uuid
+        """,
+        person_id,
         )
         if person is None:
             raise HTTPException(status_code=404, detail="person_not_found")
@@ -847,12 +885,13 @@ async def admin_root_alias() -> RedirectResponse:
 
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)
 async def admin_overview(request: Request) -> HTMLResponse:
-    overview, conversations, tasks, people, chats = await asyncio.gather(
+    overview, conversations, tasks, people, chats, owner_profile = await asyncio.gather(
         get_analytics_overview_data(request.app),
         get_conversation_data(request.app, limit=6),
         get_open_tasks_data(request.app, limit=6),
         get_people_data(request.app, limit=6),
         get_chat_data(request.app, limit=6),
+        get_owner_profile_data(request.app),
     )
     return _admin_template_response(
         request,
@@ -866,6 +905,22 @@ async def admin_overview(request: Request) -> HTMLResponse:
             tasks=tasks,
             people=people,
             chats=chats,
+            owner_profile=owner_profile,
+        ),
+    )
+
+
+@router.get("/admin/me", response_class=HTMLResponse, include_in_schema=False)
+async def admin_me(request: Request) -> HTMLResponse:
+    detail = await get_owner_profile_data(request.app)
+    return _admin_template_response(
+        request,
+        name="admin_person_detail.html",
+        context=_template_context(
+            request,
+            page_title="Мой профиль",
+            current_page="me",
+            detail=detail,
         ),
     )
 
@@ -951,8 +1006,12 @@ async def admin_people(request: Request, limit: int = 50, manual_tag: str | None
 
 
 @router.get("/admin/people/{person_id}", response_class=HTMLResponse, include_in_schema=False)
-async def admin_person_detail(request: Request, person_id: str) -> HTMLResponse:
+async def admin_person_detail(request: Request, person_id: str) -> Response:
     detail = await get_person_detail_data(request.app, person_id)
+    if detail["person"].get("is_owner"):
+        response = RedirectResponse(url="/admin/me", status_code=307)
+        _apply_admin_no_cache_headers(response)
+        return response
     return _admin_template_response(
         request,
         name="admin_person_detail.html",
@@ -971,6 +1030,9 @@ async def admin_person_block(
     person_id: str,
     redirect_to: Annotated[str, Form()] = "/admin/people",
 ) -> RedirectResponse:
+    owner_person_id = await get_owner_person_id(request.app)
+    if person_id == owner_person_id:
+        return _redirect_with_flash("/admin/me", "owner_profile_readonly")
     detail = await get_person_detail_data(request.app, person_id)
     current = bool(detail["person"]["blocked"])
     blocked = not current
@@ -985,6 +1047,9 @@ async def admin_person_annotations(
     person_id: str,
     form_data: Annotated[PersonAnnotationsForm, Form()],
 ) -> RedirectResponse:
+    owner_person_id = await get_owner_person_id(request.app)
+    if person_id == owner_person_id:
+        return _redirect_with_flash("/admin/me", "owner_profile_readonly")
     await update_person_annotations(
         request.app,
         person_id,

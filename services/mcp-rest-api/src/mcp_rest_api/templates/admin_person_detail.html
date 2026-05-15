@@ -4,18 +4,20 @@
 <section class="panel detail-hero">
   <div class="detail-head">
     <div>
-      <p class="eyebrow">Профиль человека</p>
+      <p class="eyebrow">{% if detail.owner_profile_mode %}Профиль владельца{% else %}Профиль человека{% endif %}</p>
       <h3>{{ detail.person.display_name }}</h3>
       <p class="panel-copy">@{{ detail.person.username or "не указан" }} · Последний контакт {{ detail.person.last_interaction_at|datetime }}</p>
     </div>
     <div class="action-row">
       <a class="button ghost" href="/persons/{{ detail.person.id }}/context">Открыть JSON-контекст</a>
+      {% if not detail.owner_profile_mode %}
       <form method="post" action="/admin/people/{{ detail.person.id }}/block" class="inline-form">
         <input type="hidden" name="redirect_to" value="/admin/people/{{ detail.person.id }}" />
         <button type="submit" class="button {% if detail.person.blocked %}success{% else %}warn{% endif %}">
           {% if detail.person.blocked %}Разблокировать{% else %}Блокировать{% endif %}
         </button>
       </form>
+      {% endif %}
     </div>
   </div>
   <div class="metric-inline">
@@ -36,6 +38,20 @@
 </section>
 
 <section class="two-column">
+  {% if detail.owner_profile_mode %}
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Переходный режим</h3>
+    </div>
+    <p class="inline-note">
+      Этот раздел показывает first-party профиль владельца. Технически он пока опирается на переходную запись в `person`,
+      но в канонической архитектуре больше не трактуется как обычная внешняя персона.
+    </p>
+    <p class="panel-copy">
+      Сообщения владельца используются как контекст для интерпретации людей, чатов и задач, а не как ещё одна карточка в адресной книге.
+    </p>
+  </article>
+  {% else %}
   <article class="panel">
     <div class="panel-header">
       <h3>Метки и комментарий</h3>
@@ -67,6 +83,7 @@
       </div>
     </form>
   </article>
+  {% endif %}
 
   <article class="panel">
     <div class="panel-header">

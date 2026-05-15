@@ -8,6 +8,17 @@
 
 Qdrant и Neo4j считаются derived projections, которые можно перестроить из canonical данных.
 
+## First-party vs third-party
+
+В canonical AI-модели нужно жёстко разделять:
+
+- `owner_profile` / first-party identity владельца;
+- `person` / third-party людей, с которыми владелец общается.
+
+Сообщения владельца не должны трактоваться как "ещё одна персона в списке контактов". Они должны использоваться как first-party context для интерпретации людей, чатов, задач и retrieval.
+
+Текущий runtime ещё использует переходную backing record в `person(is_owner=true)`, но это transitional compatibility layer, а не целевая knowledge model.
+
 ## Postgres
 
 В Postgres хранятся:
@@ -38,6 +49,8 @@ Qdrant и Neo4j считаются derived projections, которые можн�
 
 Это нужно, чтобы бизнес- и личные сегменты не зависели только от AI-интерпретации.
 
+Но эти поля относятся к внешним людям. Для самого владельца нужен отдельный first-party profile layer, а не self-contact в `person`.
+
 ## Qdrant
 
 Qdrant используется только как semantic retrieval projection.
@@ -63,6 +76,8 @@ Qdrant используется только как semantic retrieval projectio
 - `schema_version`
 - `analysis_window_id`
 - `source_window_id`
+
+`owner_id` здесь — это first-party principal, а не ordinary contact row.
 
 Текущее правило профилей:
 
@@ -92,6 +107,8 @@ Neo4j используется только для relationship graph.
 
 Manual tags владельца не должны становиться отдельным источником правды в Neo4j.
 Если они и проецируются в граф, то только как derived labels from Postgres canonical annotations.
+
+First-party owner identity в конечной схеме тоже не должна жить как ordinary `Person` node. Допустима переходная проекция для совместимости, но target graph обязан различать owner context и external persons.
 
 ## Retrieval precedence
 
