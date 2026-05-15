@@ -68,6 +68,10 @@ Web SPA для владельца инсталляции. Один пользо�
 
 ### Person card
 - Header: avatar, display_name, username, action menu (erase, export, block).
+- Operator annotations panel:
+  - editable `manual tags` for segmentation, for example `коллега`, `супруга`, `пет-проект`, `семья`, `клиент`;
+  - free-form `owner note`, where владелец может оставить комментарий или контекст;
+  - save action with visible last-updated timestamp and actor.
 - Tabs:
   1. **Overview** — bio, topics, organizations, style, trust.
   2. **Interactions** — лента Interaction'ов.
@@ -111,6 +115,7 @@ Web SPA для владельца инсталляции. Один пользо�
 - **Empty states** — для каждой таблицы есть осмысленный empty state с CTA.
 - **Errors** — RFC ProblemDetails отображается компонентом `<ErrorBanner>` со ссылкой на runbook.
 - **Loading** — Suspense + skeletons.
+- **Form UX for manual tags/notes** — server-rendered admin path should accept either repeated tag inputs or one normalized comma-separated field, validate through a structured form model, and always redirect after POST with explicit feedback message.
 
 ## Авторизация
 
@@ -134,3 +139,4 @@ Web SPA для владельца инсталляции. Один пользо�
 
 - Q-UI-1. Делать ли «mini-app для Telegram» в дополнение к web-UI? — see PRD Q-PRD-3.
 - Q-UI-2. Поддерживать ли встроенный chat-интерфейс «спросить свою память» прямо в UI без внешнего LLM?
+- Q-UI-3. Нужны ли кроме `manual tags` отдельные `relationship labels` с ограниченным словарём (`семья`, `работа`, `друзья`, `партнёр`, `хобби`) для более строгой сегментации?

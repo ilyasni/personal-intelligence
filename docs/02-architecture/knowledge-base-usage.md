@@ -30,6 +30,14 @@ Qdrant и Neo4j считаются derived projections, которые можн�
 - deterministic read path;
 - ground truth для reprocess / rollback / reindex.
 
+Дополнительно в canonical person-layer должны жить operator-defined annotations:
+
+- manual tags / labels владельца;
+- owner comments / notes;
+- future segmentation hints, введённые человеком, а не моделью.
+
+Это нужно, чтобы бизнес- и личные сегменты не зависели только от AI-интерпретации.
+
 ## Qdrant
 
 Qdrant используется только как semantic retrieval projection.
@@ -46,6 +54,7 @@ Qdrant используется только как semantic retrieval projectio
 - `owner_id`
 - `chat_id`
 - `person_ids`
+- `person_manual_tags`
 - `kind`
 - `topic_tags`
 - `ts_from`
@@ -80,6 +89,9 @@ Neo4j используется только для relationship graph.
 - relationship-centric queries;
 - recency / reciprocity / communication strength;
 - explainable graph traversal поверх evidence-backed canonical памяти.
+
+Manual tags владельца не должны становиться отдельным источником правды в Neo4j.
+Если они и проецируются в граф, то только как derived labels from Postgres canonical annotations.
 
 ## Retrieval precedence
 
