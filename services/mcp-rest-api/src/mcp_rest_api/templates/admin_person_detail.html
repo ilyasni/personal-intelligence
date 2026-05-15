@@ -21,11 +21,44 @@
   <div class="metric-inline">
     <span>Темы: {{ detail.person.topics|csvish }}</span>
     <span>Организации: {{ detail.person.organizations|csvish }}</span>
+    <span>Мои теги: {{ detail.person.manual_tags|csvish }}</span>
     <span>Статус: {% if detail.person.blocked %}заблокирован{% else %}активен{% endif %}</span>
   </div>
 </section>
 
 <section class="two-column">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Метки и комментарий</h3>
+    </div>
+    <form method="post" action="/admin/people/{{ detail.person.id }}/annotations" class="annotation-form">
+      <input type="hidden" name="redirect_to" value="/admin/people/{{ detail.person.id }}" />
+      <div class="field-group">
+        <label for="manual_tags">Ручные теги</label>
+        <input
+          id="manual_tags"
+          type="text"
+          name="manual_tags"
+          value="{{ detail.person.manual_tags|join(', ') }}"
+          placeholder="коллега, семья, pet-проект, клиент"
+        />
+        <p class="helper-text">Теги нормализуются в один список и используются для фильтрации и сегментации.</p>
+      </div>
+      <div class="field-group">
+        <label for="notes">Комментарий владельца</label>
+        <textarea
+          id="notes"
+          name="notes"
+          rows="6"
+          placeholder="Например: работает со мной по фронтенду, писать лучше вечером, относится к pet-проекту."
+        >{{ detail.person.notes or "" }}</textarea>
+      </div>
+      <div class="action-row">
+        <button type="submit" class="button">Сохранить</button>
+      </div>
+    </form>
+  </article>
+
   <article class="panel">
     <div class="panel-header">
       <h3>Последние окна</h3>

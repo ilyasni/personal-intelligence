@@ -92,6 +92,7 @@ class Person(Base):
     role: Mapped[str | None] = mapped_column(Text)
     organizations: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
     topics: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    manual_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
     communication_style: Mapped[str | None] = mapped_column(Text)
     trust_score: Mapped[float] = mapped_column(Numeric(4, 3), nullable=False, default=0.5)
     last_interaction_at: Mapped[datetime | None] = mapped_column(TZ)
@@ -108,6 +109,7 @@ class Person(Base):
         Index("idx_person_last_interaction", "last_interaction_at"),
         Index("idx_person_topics_gin", "topics", postgresql_using="gin"),
         Index("idx_person_organizations_gin", "organizations", postgresql_using="gin"),
+        Index("idx_person_manual_tags_gin", "manual_tags", postgresql_using="gin"),
     )
 
 

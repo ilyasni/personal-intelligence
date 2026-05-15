@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, cast
@@ -13,6 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from neo4j import AsyncGraphDatabase
+from pydantic import BaseModel
 from qdrant_client import AsyncQdrantClient, models
 
 from mcp_rest_api.settings import settings
@@ -94,6 +96,35 @@ def _normalize_string_list(value: Any) -> list[str]:
     return []
 
 
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _parse_manual_tags(value: str | None) -> list[str]:
+    if not value:
+        return []
+    normalized_tags: list[str] = []
+    seen: set[str] = set()
+    for raw_tag in re.split(r"[,;\n]", value):
+        tag = " ".join(raw_tag.strip().split()).casefold()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        normalized_tags.append(tag)
+    return normalized_tags
+
+
+class PersonAnnotationsForm(BaseModel):
+    manual_tags: str = ""
+    notes: str = ""
+    redirect_to: str = "/admin/people"
+
+    model_config = {"extra": "forbid"}
+
+
 FLASH_MESSAGES = {
     "window_requeued": ("success", "Окно добавлено в очередь на повторную обработку."),
     "task_status_done": ("success", "Задача переведена в статус «выполнено»."),
@@ -103,6 +134,7 @@ FLASH_MESSAGES = {
     "chat_disallowed": ("warn", "Чат удалён из allowlist."),
     "person_blocked": ("warn", "Профиль заблокирован для ingestion и дальнейшей обработки."),
     "person_unblocked": ("success", "Профиль разблокирован и снова участвует в обработке."),
+    "person_annotations_saved": ("success", "Теги и комментарий сохранены."),
 }
 
 
@@ -281,8 +313,14 @@ async def get_conversation_data(app: FastAPI, limit: int = 20) -> list[dict[str,
     return items
 
 
-async def get_people_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
+async def get_people_data(
+    app: FastAPI,
+    limit: int = 50,
+    *,
+    manual_tag: str | None = None,
+) -> list[dict[str, Any]]:
     pool: asyncpg.Pool = app.state.db_pool
+    normalized_manual_tag = _normalize_optional_text(manual_tag)
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -293,17 +331,25 @@ async def get_people_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]
                 display_name,
                 organizations,
                 topics,
+                manual_tags,
                 communication_style,
                 trust_score::float AS trust_score,
                 last_interaction_at,
                 blocked
             FROM person
+            WHERE $2::text IS NULL OR $2 = ANY(manual_tags)
             ORDER BY COALESCE(last_interaction_at, updated_at) DESC NULLS LAST, created_at DESC
             LIMIT $1
             """,
             limit,
+            normalized_manual_tag,
         )
-    return [dict(row) for row in rows]
+    items = [dict(row) for row in rows]
+    for item in items:
+        item["organizations"] = _normalize_string_list(item.get("organizations"))
+        item["topics"] = _normalize_string_list(item.get("topics"))
+        item["manual_tags"] = _normalize_string_list(item.get("manual_tags"))
+    return items
 
 
 async def get_chat_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
@@ -504,6 +550,31 @@ async def set_person_blocked(app: FastAPI, person_id: str, *, blocked: bool) -> 
         raise HTTPException(status_code=404, detail="person_not_found")
 
 
+async def update_person_annotations(
+    app: FastAPI,
+    person_id: str,
+    *,
+    manual_tags: list[str],
+    notes: str | None,
+) -> None:
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            UPDATE person
+            SET manual_tags = $2::text[],
+                notes = $3,
+                updated_at = now()
+            WHERE id = $1::uuid
+            """,
+            person_id,
+            manual_tags,
+            notes,
+        )
+    if result.endswith("0"):
+        raise HTTPException(status_code=404, detail="person_not_found")
+
+
 async def set_chat_allowlist(app: FastAPI, chat_id: str, *, is_allowed: bool) -> None:
     pool: asyncpg.Pool = app.state.db_pool
     async with pool.acquire() as conn:
@@ -529,7 +600,17 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
     async with pool.acquire() as conn:
         person = await conn.fetchrow(
             """
-            SELECT id, tg_user_id, username, display_name, topics, organizations, notes, last_interaction_at, blocked
+            SELECT
+                id,
+                tg_user_id,
+                username,
+                display_name,
+                topics,
+                organizations,
+                manual_tags,
+                notes,
+                last_interaction_at,
+                blocked
             FROM person
             WHERE id = $1::uuid
             """,
@@ -597,6 +678,7 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
     person_payload = dict(person)
     person_payload["topics"] = _normalize_string_list(person_payload.get("topics"))
     person_payload["organizations"] = _normalize_string_list(person_payload.get("organizations"))
+    person_payload["manual_tags"] = _normalize_string_list(person_payload.get("manual_tags"))
 
     return {
         "person": person_payload,
@@ -739,7 +821,7 @@ async def admin_task_status(
 
 
 @router.get("/admin/people", response_class=HTMLResponse, include_in_schema=False)
-async def admin_people(request: Request, limit: int = 50) -> HTMLResponse:
+async def admin_people(request: Request, limit: int = 50, manual_tag: str | None = None) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request,
         name="admin_people.html",
@@ -747,8 +829,9 @@ async def admin_people(request: Request, limit: int = 50) -> HTMLResponse:
             request,
             page_title="Люди",
             current_page="people",
-            people=await get_people_data(request.app, limit=limit),
+            people=await get_people_data(request.app, limit=limit, manual_tag=manual_tag),
             limit=limit,
+            active_manual_tag=_normalize_optional_text(manual_tag),
         ),
     )
 
@@ -780,6 +863,21 @@ async def admin_person_block(
     await set_person_blocked(request.app, person_id, blocked=blocked)
     flash_key = "person_blocked" if blocked else "person_unblocked"
     return _redirect_with_flash(redirect_to, flash_key)
+
+
+@router.post("/admin/people/{person_id}/annotations", include_in_schema=False)
+async def admin_person_annotations(
+    request: Request,
+    person_id: str,
+    form_data: Annotated[PersonAnnotationsForm, Form()],
+) -> RedirectResponse:
+    await update_person_annotations(
+        request.app,
+        person_id,
+        manual_tags=_parse_manual_tags(form_data.manual_tags),
+        notes=_normalize_optional_text(form_data.notes),
+    )
+    return _redirect_with_flash(form_data.redirect_to, "person_annotations_saved")
 
 
 @router.get("/admin/chats", response_class=HTMLResponse, include_in_schema=False)

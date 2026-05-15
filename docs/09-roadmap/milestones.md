@@ -34,7 +34,7 @@
 | E-01 | `mcp-rest-api` baseline | E | DONE | codex | runtime-v1.0.0 | grounded retrieval endpoints + reprocess endpoint |
 | E-02 | Analytics layer v1 | E | DONE | codex | runtime-v1.0.0 | overview, conversations, basic HTML UI |
 | E-03 | Admin UI baseline | E | DONE | codex | runtime-v1.1.0 | multi-page operator UI with overview, conversations, tasks, people, chats, operator actions, detail drill-downs, flash UX, person block controls, and direct LAN entrypoint |
-| E-04 | Person manual tags and notes | E | PLANNED | codex | - | operator-defined tags like `коллега`, `супруга`, `пет-проект`, plus free-form notes/comments per person; used for segmentation, filtering, retrieval grounding, and admin UX |
+| E-04 | Person manual tags and notes | E | DONE | codex | runtime-v1.1.3 | canonical `person.manual_tags` + owner comment editing in admin UI, plus filtering by manual tag for segmentation |
 | F-01 | Cutover verification | F | DONE | codex | runtime-v1.0.1 | canonical compose live on server, smoke strict green, cutover audit green, orphan groups absent |
 | F-02 | Deploy automation | F | DONE | codex | runtime-v1.0.5 | manual GitHub Actions deploy + remote rollout script + containerized migration-runner |
 
@@ -62,6 +62,7 @@
 | sprint-17 | 2026-05-14 | E-03 access follow-up | direct LAN admin entrypoint online | mcp-rest-api now redirects `/` to `/admin` and can be published to `http://192.168.31.165` without SSH tunneling |
 | sprint-18 | 2026-05-14 | E-03 data recovery | admin data restored from Redis history | empty admin root cause was missing canonical backfill, so `ai-orchestrator.backfill` and an ops runbook were added |
 | sprint-19 | 2026-05-15 | E-03 localization follow-up | owner identity normalized and AI outputs moved to Russian-first mode | legacy English task data required a one-time cleanup pass in addition to pipeline fixes |
+| sprint-20 | 2026-05-15 | E-04 | manual person tags and owner comments online | canonical segmentation works best when tags live in Postgres and are editable directly from operator UI |
 
 ## Releases
 
@@ -89,6 +90,7 @@
 | v1.1.0 | 2026-05-14 | direct LAN publishing for admin surface + root redirect | runtime-v1.1.0 |
 | v1.1.1 | 2026-05-14 | admin data recovery tooling + backfill runbook | runtime-v1.1.1 |
 | v1.1.2 | 2026-05-15 | owner identity normalization + Russian-first AI output baseline | runtime-v1.1.2 |
+| v1.1.3 | 2026-05-15 | manual person tags, owner comments, and people-list segmentation filter | runtime-v1.1.3 |
 
 ## Open questions
 
@@ -97,4 +99,4 @@
 - grounded synthesis in API responses
 - profile switching / re-embedding workflows beyond initial alias bootstrap
 - privacy / erase cascade hardening for analytics and vector projections
-- operator-defined person tags / notes with propagation into filters, retrieval, and segmentation
+- stricter controlled vocabulary or relationship labels on top of free-form manual tags

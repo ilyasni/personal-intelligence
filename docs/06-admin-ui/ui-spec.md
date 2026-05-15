@@ -72,6 +72,7 @@ Web SPA для владельца инсталляции. Один пользо�
   - editable `manual tags` for segmentation, for example `коллега`, `супруга`, `пет-проект`, `семья`, `клиент`;
   - free-form `owner note`, where владелец может оставить комментарий или контекст;
   - save action with visible last-updated timestamp and actor.
+  - in the current server-rendered admin implementation, tags are edited as one normalized comma-separated field and immediately become available as a people-list filter.
 - Tabs:
   1. **Overview** — bio, topics, organizations, style, trust.
   2. **Interactions** — лента Interaction'ов.
@@ -139,4 +140,4 @@ Web SPA для владельца инсталляции. Один пользо�
 
 - Q-UI-1. Делать ли «mini-app для Telegram» в дополнение к web-UI? — see PRD Q-PRD-3.
 - Q-UI-2. Поддерживать ли встроенный chat-интерфейс «спросить свою память» прямо в UI без внешнего LLM?
-- Q-UI-3. Нужны ли кроме `manual tags` отдельные `relationship labels` с ограниченным словарём (`семья`, `работа`, `друзья`, `партнёр`, `хобби`) для более строгой сегментации?
+- Q-UI-3. Нужны ли кроме `manual tags` отдельные `relationship labels` с ограниченным словарём (`семья`, `работа`, `друзья`, `партнёр`, `хобби`) для более строгой сегментации поверх уже внедрённых free-form тегов?

@@ -3,9 +3,28 @@
 {% block content %}
 <section class="panel">
   <div class="panel-header">
-    <h3>Люди</h3>
-    <p class="panel-copy">{{ limit }} последних активных профилей из канонической памяти.</p>
+    <div>
+      <h3>Люди</h3>
+      <p class="panel-copy">{{ limit }} последних активных профилей из канонической памяти.</p>
+    </div>
+    <form method="get" action="/admin/people" class="filter-form">
+      <input
+        type="text"
+        name="manual_tag"
+        value="{{ active_manual_tag or '' }}"
+        placeholder="Фильтр по тегу: коллега, семья, pet-проект"
+      />
+      <button type="submit" class="button ghost">Фильтровать</button>
+      {% if active_manual_tag %}
+      <a class="button ghost" href="/admin/people">Сбросить</a>
+      {% endif %}
+    </form>
   </div>
+  {% if active_manual_tag %}
+  <div class="pill-row">
+    <span class="pill">Фильтр: {{ active_manual_tag }}</span>
+  </div>
+  {% endif %}
   <div class="table-shell">
     <table>
       <thead>
@@ -14,6 +33,7 @@
           <th>Username</th>
           <th>Организации</th>
           <th>Темы</th>
+          <th>Мои теги</th>
           <th>Доверие</th>
           <th>Последний контакт</th>
           <th>Действия</th>
@@ -32,6 +52,15 @@
           <td>@{{ person.username or "не указан" }}</td>
           <td>{{ person.organizations|csvish }}</td>
           <td>{{ person.topics|csvish }}</td>
+          <td>
+            <div class="pill-row">
+              {% for tag in person.manual_tags %}
+              <a class="pill" href="/admin/people?manual_tag={{ tag }}">{{ tag }}</a>
+              {% else %}
+              <span class="pill muted">нет тегов</span>
+              {% endfor %}
+            </div>
+          </td>
           <td>{{ "%.3f"|format(person.trust_score) }}</td>
           <td>{{ person.last_interaction_at|datetime }}</td>
           <td>
@@ -49,7 +78,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" class="empty-cell">Профили отсутствуют.</td>
+          <td colspan="8" class="empty-cell">Профили отсутствуют.</td>
         </tr>
         {% endfor %}
       </tbody>

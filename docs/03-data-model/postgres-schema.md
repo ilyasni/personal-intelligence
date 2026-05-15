@@ -59,10 +59,11 @@ CREATE TABLE person (
   role            TEXT,                              -- inferred role (например, «продакт-менеджер»)
   organizations   TEXT[] NOT NULL DEFAULT '{}',
   topics          TEXT[] NOT NULL DEFAULT '{}',     -- частые темы общения
+  manual_tags     TEXT[] NOT NULL DEFAULT '{}',     -- вручную заданные теги владельца для сегментации
   communication_style TEXT,                          -- «краткий, по делу»
   trust_score     NUMERIC(4,3) NOT NULL DEFAULT 0.5 CHECK (trust_score BETWEEN 0 AND 1),
   last_interaction_at TIMESTAMPTZ,
-  notes           TEXT,
+  notes           TEXT,                              -- комментарий владельца к персоне
   blocked         BOOLEAN NOT NULL DEFAULT FALSE,    -- запрет ingestion-обработки
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -71,6 +72,7 @@ CREATE INDEX idx_person_username ON person(username);
 CREATE INDEX idx_person_last_interaction ON person(last_interaction_at DESC);
 CREATE INDEX idx_person_topics_gin ON person USING GIN(topics);
 CREATE INDEX idx_person_organizations_gin ON person USING GIN(organizations);
+CREATE INDEX idx_person_manual_tags_gin ON person USING GIN(manual_tags);
 ```
 
 ### `chat_membership`

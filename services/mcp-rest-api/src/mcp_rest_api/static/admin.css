@@ -296,6 +296,50 @@ th {
   color: #8d2f16;
 }
 
+.filter-form,
+.annotation-form {
+  display: grid;
+  gap: 12px;
+}
+
+.filter-form {
+  grid-template-columns: minmax(260px, 360px) auto auto;
+  align-items: center;
+}
+
+.field-group {
+  display: grid;
+  gap: 8px;
+}
+
+.field-group label {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.field-group input,
+.field-group textarea,
+.filter-form input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink);
+  font: inherit;
+}
+
+.field-group textarea {
+  resize: vertical;
+  min-height: 132px;
+}
+
+.helper-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -401,5 +445,9 @@ th {
 
   .detail-head {
     flex-direction: column;
+  }
+
+  .filter-form {
+    grid-template-columns: 1fr;
   }
 }
