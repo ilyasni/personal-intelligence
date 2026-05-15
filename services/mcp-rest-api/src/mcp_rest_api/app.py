@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
+PERSON_DETAIL_QDRANT_TIMEOUT_S = 0.8
+PERSON_DETAIL_NEO4J_TIMEOUT_S = 0.8
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter()
@@ -116,6 +118,54 @@ def _parse_manual_tags(value: str | None) -> list[str]:
         seen.add(tag)
         normalized_tags.append(tag)
     return normalized_tags
+
+
+def _list_preview(values: Sequence[str] | None, *, limit: int) -> tuple[list[str], int]:
+    cleaned = [value for value in values or [] if value]
+    if len(cleaned) <= limit:
+        return cleaned, 0
+    return cleaned[:limit], len(cleaned) - limit
+
+
+def _truncate_text(value: str | None, *, limit: int = 240) -> str:
+    if not value:
+        return "—"
+    normalized = " ".join(value.split())
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: limit - 1].rstrip()}…"
+
+
+def _semantic_memory_preview_items(items: Sequence[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    previews: list[dict[str, Any]] = []
+    for item in items or []:
+        kind = str(item.get("kind") or item.get("type") or "memory")
+        summary_source = item.get("summary") or item.get("narrative") or item.get("text") or item.get("content")
+        previews.append(
+            {
+                "kind": kind,
+                "summary": _truncate_text(str(summary_source) if summary_source is not None else None, limit=220),
+                "window_id": item.get("window_id"),
+                "chat_id": item.get("tg_chat_id"),
+            }
+        )
+    return previews
+
+
+async def _await_with_timeout(
+    awaitable: Any,
+    *,
+    timeout_s: float,
+    fallback: Any,
+    status_name: str,
+) -> tuple[Any, str]:
+    try:
+        async with asyncio.timeout(timeout_s):
+            return await awaitable, "ok"
+    except TimeoutError:
+        return fallback, f"{status_name}_timeout"
+    except Exception:
+        return fallback, f"{status_name}_error"
 
 
 class PersonAnnotationsForm(BaseModel):
@@ -206,9 +256,14 @@ def _redirect_with_flash(path: str, flash_key: str) -> RedirectResponse:
 
 
 def _apply_admin_no_cache_headers(response: HTMLResponse | RedirectResponse) -> None:
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
+    # HTML/redirect responses for admin pages should not land in shared proxy/CDN caches.
+    response.headers["Cache-Control"] = (
+        "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, private"
+    )
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    # Некоторые CDN (Fastly и др.) смотрят Surrogate-Control, если игнорируют общий Cache-Control.
+    response.headers["Surrogate-Control"] = "no-store"
 
 
 def _admin_template_response(
@@ -660,8 +715,7 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
                 person["tg_user_id"],
             )
 
-    semantic_hits: list[dict[str, Any]] = []
-    try:
+    async def load_semantic_hits() -> list[dict[str, Any]]:
         hits, _ = await qdrant.scroll(
             collection_name=settings.qdrant_alias_name,
             scroll_filter=models.Filter(
@@ -676,12 +730,12 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
             with_payload=True,
             with_vectors=False,
         )
-        semantic_hits = [point.payload or {} for point in hits]
-    except Exception:
-        semantic_hits = []
+        return [point.payload or {} for point in hits]
 
-    graph_summary: list[dict[str, Any]] = []
-    if neo4j_driver is not None:
+    async def load_graph_summary() -> list[dict[str, Any]]:
+        if neo4j_driver is None:
+            return []
+
         async def read_graph_neighbors(tx: Any) -> list[dict[str, Any]]:
             result = await tx.run(
                 """
@@ -697,18 +751,50 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
 
         async with neo4j_driver.session(database=settings.neo4j_database) as session:
             records = await session.execute_read(read_graph_neighbors)
-            graph_summary = [dict(record) for record in records]
+            return [dict(record) for record in records]
+
+    semantic_result, graph_result = await asyncio.gather(
+        _await_with_timeout(
+            load_semantic_hits(),
+            timeout_s=PERSON_DETAIL_QDRANT_TIMEOUT_S,
+            fallback=[],
+            status_name="semantic_memory",
+        ),
+        _await_with_timeout(
+            load_graph_summary(),
+            timeout_s=PERSON_DETAIL_NEO4J_TIMEOUT_S,
+            fallback=[],
+            status_name="graph_neighbors",
+        ),
+    )
+    semantic_hits, semantic_status = semantic_result
+    graph_summary, graph_status = graph_result
 
     person_payload = dict(person)
     person_payload["topics"] = _normalize_string_list(person_payload.get("topics"))
     person_payload["organizations"] = _normalize_string_list(person_payload.get("organizations"))
     person_payload["manual_tags"] = _normalize_string_list(person_payload.get("manual_tags"))
+    person_payload["topics_preview"], person_payload["topics_hidden_count"] = _list_preview(
+        person_payload["topics"],
+        limit=12,
+    )
+    person_payload["organizations_preview"], person_payload["organizations_hidden_count"] = _list_preview(
+        person_payload["organizations"],
+        limit=6,
+    )
+    person_payload["manual_tags_preview"], person_payload["manual_tags_hidden_count"] = _list_preview(
+        person_payload["manual_tags"],
+        limit=8,
+    )
 
     return {
         "person": person_payload,
         "recent_windows": [dict(row) for row in windows],
         "semantic_memory": semantic_hits,
+        "semantic_memory_preview": _semantic_memory_preview_items(semantic_hits),
         "graph_neighbors": graph_summary,
+        "semantic_memory_status": semantic_status,
+        "graph_neighbors_status": graph_status,
     }
 
 

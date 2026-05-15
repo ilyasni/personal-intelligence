@@ -19,9 +19,18 @@
     </div>
   </div>
   <div class="metric-inline">
-    <span>Темы: {{ detail.person.topics|csvish }}</span>
-    <span>Организации: {{ detail.person.organizations|csvish }}</span>
-    <span>Мои теги: {{ detail.person.manual_tags|csvish }}</span>
+    <span>
+      Темы: {{ (detail.person.topics_preview or detail.person.topics)|csvish }}
+      {% if detail.person.topics_hidden_count %}+ ещё {{ detail.person.topics_hidden_count }}{% endif %}
+    </span>
+    <span>
+      Организации: {{ (detail.person.organizations_preview or detail.person.organizations)|csvish }}
+      {% if detail.person.organizations_hidden_count %}+ ещё {{ detail.person.organizations_hidden_count }}{% endif %}
+    </span>
+    <span>
+      Мои теги: {{ (detail.person.manual_tags_preview or detail.person.manual_tags)|csvish }}
+      {% if detail.person.manual_tags_hidden_count %}+ ещё {{ detail.person.manual_tags_hidden_count }}{% endif %}
+    </span>
     <span>Статус: {% if detail.person.blocked %}заблокирован{% else %}активен{% endif %}</span>
   </div>
 </section>
@@ -104,6 +113,9 @@
     <div class="panel-header">
       <h3>Связи в графе</h3>
     </div>
+    {% if detail.graph_neighbors_status != "ok" %}
+    <p class="inline-note warn">Граф связей временно недоступен. Профиль показан без дополнительных графовых связей.</p>
+    {% endif %}
     <div class="stack-list">
       {% for neighbor in detail.graph_neighbors %}
       <div class="stack-item">
@@ -123,7 +135,26 @@
     <div class="panel-header">
       <h3>Семантическая память</h3>
     </div>
-    <pre class="code-block">{{ detail.semantic_memory|prettyjson }}</pre>
+    {% if detail.semantic_memory_status != "ok" %}
+    <p class="inline-note warn">Семантическая память временно недоступна. Профиль открыт без векторного контекста.</p>
+    {% endif %}
+    <div class="stack-list">
+      {% for memory in detail.semantic_memory_preview or detail.semantic_memory %}
+      <div class="stack-item">
+        <div class="stack-meta">
+          <span>{{ memory.kind or memory.get("kind") or "memory" }}</span>
+          <span>{{ memory.window_id or memory.get("window_id") or memory.chat_id or memory.get("tg_chat_id") or "—" }}</span>
+        </div>
+        <strong>{{ memory.summary or memory.get("summary") or "Без краткого описания" }}</strong>
+      </div>
+      {% else %}
+      <p class="empty-state">Семантическая память для этого профиля пока пуста.</p>
+      {% endfor %}
+    </div>
+    <details class="raw-details">
+      <summary>Показать raw JSON</summary>
+      <pre class="code-block">{{ detail.semantic_memory|prettyjson }}</pre>
+    </details>
   </article>
 </section>
 {% endblock %}

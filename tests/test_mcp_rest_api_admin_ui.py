@@ -149,6 +149,8 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
             "tasks": [{"title": "Ship admin UI", "description": "Finish operator screens", "status": "open", "due_at": "2026-05-15 10:00"}],
             "graph_neighbors": [{"person_id": "person-2", "weight": 0.8, "last_window_id": "window-1"}],
             "semantic_memory": [{"kind": "analysis_window", "summary": "Discussed rollout details."}],
+            "graph_neighbors_status": "ok",
+            "semantic_memory_status": "ok",
         }
 
     async def fake_chat_detail(_app: Any, chat_id: str) -> dict[str, Any]:
@@ -236,6 +238,7 @@ def test_admin_overview_uses_versioned_static_asset(monkeypatch: pytest.MonkeyPa
         response = client.get("/admin")
     assert response.status_code == 200
     assert "/static/admin.css?v=" in response.text
+    assert 'http-equiv="Cache-Control"' in response.text
 
 
 def test_admin_people_links_context(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -247,6 +250,38 @@ def test_admin_people_links_context(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "коллега" in response.text
     assert "/persons/person-1/context" in response.text
     assert "Блокировать" in response.text
+
+
+def test_person_detail_shows_degraded_notices(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _state = _build_app(monkeypatch)
+
+    async def fake_degraded_person_detail(_app: Any, person_id: str) -> dict[str, Any]:
+        return {
+            "person": {
+                "id": person_id,
+                "username": "ilyasni",
+                "display_name": "Ilyas",
+                "last_interaction_at": "2026-05-14 08:20",
+                "topics": ["ops", "memory"],
+                "organizations": ["PIL"],
+                "manual_tags": ["коллега"],
+                "notes": None,
+                "blocked": False,
+            },
+            "recent_windows": [],
+            "tasks": [],
+            "graph_neighbors": [],
+            "semantic_memory": [],
+            "graph_neighbors_status": "graph_neighbors_timeout",
+            "semantic_memory_status": "semantic_memory_timeout",
+        }
+
+    monkeypatch.setattr(mcp_app, "get_person_detail_data", fake_degraded_person_detail)
+    with TestClient(app) as client:
+        response = client.get("/admin/people/person-1")
+    assert response.status_code == 200
+    assert "Граф связей временно недоступен" in response.text
+    assert "Семантическая память временно недоступна" in response.text
 
 
 def test_conversation_detail_renders_messages_and_claims(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -315,3 +350,34 @@ def test_person_annotations_post_redirects(monkeypatch: pytest.MonkeyPatch) -> N
     assert state["person_annotation_updates"] == [
         ("person-1", ["коллега", "pet-проект", "семья"], "Лучше писать вечером.")
     ]
+
+
+def test_person_detail_progressive_disclosure_helpers() -> None:
+    preview, hidden = mcp_app._list_preview(["one", "two", "three", "four"], limit=2)
+    assert preview == ["one", "two"]
+    assert hidden == 2
+
+    semantic_preview = mcp_app._semantic_memory_preview_items(
+        [{"kind": "analysis_window", "summary": "x" * 260, "window_id": "window-1"}]
+    )
+    assert semantic_preview[0]["kind"] == "analysis_window"
+    assert semantic_preview[0]["window_id"] == "window-1"
+    assert semantic_preview[0]["summary"].endswith("…")
+
+
+def test_await_with_timeout_uses_fallback_on_timeout() -> None:
+    async def slow() -> str:
+        await mcp_app.asyncio.sleep(0.02)
+        return "slow"
+
+    result, status = mcp_app.asyncio.run(
+        mcp_app._await_with_timeout(
+            slow(),
+            timeout_s=0.001,
+            fallback=[],
+            status_name="semantic_memory",
+        )
+    )
+
+    assert result == []
+    assert status == "semantic_memory_timeout"
