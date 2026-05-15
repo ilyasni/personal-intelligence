@@ -121,6 +121,7 @@ docker compose -f infra/compose/docker-compose.yml down
 - Файл `.env` хранится в `infra/compose/` с `chmod 600`, в репо — только `.env.example`.
 - Чувствительные данные (`BUSINESS_BOT_WEBHOOK_SECRET`, `JWT_SECRET`, `BOT_TOKEN`, `TELETHON_API_HASH`) — через `secrets:` directive compose v3.7+.
 - Для canonical AI runtime дополнительно нужны `WORMSOFT_API_BASE`, `WORMSOFT_API_KEY`, `WORMSOFT_MODEL_DEFAULT`, `WORMSOFT_EMBEDDING_MODEL`; при fallback-маршрутизации также `POLZA_API_BASE` и `POLZA_API_KEY`.
+- Для language/identity consistency рекомендуется явно задать `ANALYSIS_OUTPUT_LANGUAGE=ru`, а также owner-нормализацию через `OWNER_TG_USER_IDS`, `OWNER_USERNAMES`, `OWNER_DISPLAY_NAMES`, `OWNER_PRIMARY_DISPLAY_NAME`.
 - Никогда не логируем секреты; `libs/observability` имеет filter на маскирование.
 
 ## TLS

@@ -148,7 +148,7 @@ def compute_message_features(
 def summarize_messages(messages: list[WindowMessagePayload], *, limit_chars: int = 360) -> str:
     parts: list[str] = []
     for msg in messages[:6]:
-        speaker = msg.tg_sender_name or f"tg:{msg.tg_sender_id}" if msg.tg_sender_id else "unknown"
+        speaker = msg.tg_sender_name or f"tg:{msg.tg_sender_id}" if msg.tg_sender_id else "неизвестный"
         parts.append(f"{speaker}: {(msg.text or '').strip()}")
     summary = " | ".join(item for item in parts if item.strip())
     if len(summary) <= limit_chars:

@@ -26,10 +26,40 @@ class Settings(BaseSettings):
     embedding_provider: str = "wormsoft"
     embedding_model: str = "qwen/qwen3-embedding:8b"
     embedding_alias: str = "pil_memory_active"
+    owner_tg_user_ids: str = ""
+    owner_usernames: str = ""
+    owner_display_names: str = ""
+    owner_primary_display_name: str = ""
 
     log_level: str = "INFO"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    def owner_tg_user_id_set(self) -> set[int]:
+        values: set[int] = set()
+        for item in self.owner_tg_user_ids.split(","):
+            cleaned = item.strip()
+            if not cleaned:
+                continue
+            try:
+                values.add(int(cleaned))
+            except ValueError:
+                continue
+        return values
+
+    def owner_username_set(self) -> set[str]:
+        return {
+            item.strip().lstrip("@").casefold()
+            for item in self.owner_usernames.split(",")
+            if item.strip()
+        }
+
+    def owner_display_name_set(self) -> set[str]:
+        return {
+            item.strip().casefold()
+            for item in self.owner_display_names.split(",")
+            if item.strip()
+        }
 
 
 settings = Settings()

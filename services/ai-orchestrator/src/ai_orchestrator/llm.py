@@ -1,4 +1,4 @@
-# ruff: noqa: TC003
+# ruff: noqa: TC003,RUF001
 from __future__ import annotations
 
 import asyncio
@@ -170,12 +170,30 @@ class AnalysisRouter:
                     ),
                     max_tokens=settings.analysis_max_tokens_out,
                 )
-                return _parse_analysis_payload(
+                result = _parse_analysis_payload(
                     raw,
                     source_window_id=source_window_id,
                     messages=messages,
                     features=features,
                 )
+                if _needs_russian_translation(result, target_language=settings.analysis_output_language):
+                    translated_raw = await client.complete_text(
+                        system_prompt=_translation_system_prompt(),
+                        user_prompt=_translation_user_prompt(result),
+                        max_tokens=settings.analysis_max_tokens_out,
+                    )
+                    translated_result = _parse_analysis_payload(
+                        translated_raw,
+                        source_window_id=source_window_id,
+                        messages=messages,
+                        features=features,
+                    )
+                    if not _needs_russian_translation(
+                        translated_result,
+                        target_language=settings.analysis_output_language,
+                    ):
+                        return translated_result
+                return result
             except Exception:
                 continue
         return _heuristic_analysis(
@@ -187,12 +205,13 @@ class AnalysisRouter:
 
 def _system_prompt() -> str:
     return (
-        "You analyze Telegram conversation windows for a personal intelligence service. "
-        "Return strict JSON only. Never assign personality traits, diagnoses, clinical labels, "
-        "or speculative psychology. Focus on factual claims, tasks, cautious communication "
-        "signals, and evidence-backed summaries. Every claim, task, and analytics signal must "
-        "reference real message ids from the window. If evidence is weak, add caveats instead of "
-        "guessing."
+        "Ты анализируешь окна переписки Telegram для сервиса personal intelligence. "
+        "Верни только строгий JSON без markdown и пояснений. "
+        "Все текстовые поля результата пиши на русском языке, даже если сообщения частично на английском. "
+        "Никогда не приписывай личностные черты, диагнозы, клинические ярлыки или спекулятивную психологию. "
+        "Фокусируйся на фактах, задачах, осторожных коммуникационных сигналах и резюме, подтверждённых evidence. "
+        "Каждый claim, task и analytics signal должен ссылаться на реальные id сообщений из текущего окна. "
+        "Если доказательств мало, добавляй caveats вместо догадок."
     )
 
 
@@ -216,50 +235,52 @@ def _user_prompt(
     ]
     schema = {
         "source_window_id": source_window_id,
-        "summary": "short grounded summary",
-        "topics": ["topic"],
+        "summary": "краткое доказательное резюме",
+        "topics": ["тема"],
         "participants": [123],
         "claims": [
             {
                 "kind": "fact|relationship|contact|topic",
-                "subject": "optional",
-                "predicate": "required",
-                "object": "optional",
-                "claim": "required",
+                "subject": "необязательно",
+                "predicate": "обязательно",
+                "object": "необязательно",
+                "claim": "обязательно",
                 "confidence": 0.0,
                 "evidence_message_ids": [1],
-                "caveats": ["optional"],
+                "caveats": ["необязательно"],
             }
         ],
         "tasks": [
             {
-                "title": "required",
-                "description": "optional",
+                "title": "обязательно",
+                "description": "необязательно",
                 "priority": 3,
                 "due_at": None,
                 "confidence": 0.0,
                 "evidence_message_ids": [1],
-                "caveats": ["optional"],
+                "caveats": ["необязательно"],
             }
         ],
         "analytics_signals": [
             {
                 "kind": "responsiveness|initiative_balance|topic_drift|conversation_health|friction|activity",
                 "score": 0.0,
-                "summary": "required",
+                "summary": "обязательно",
                 "evidence_message_ids": [1],
                 "payload": {},
             }
         ],
         "confidence": 0.0,
-        "caveats": ["optional"],
+        "caveats": ["необязательно"],
     }
     return json.dumps(
         {
             "instruction": (
-                "Produce evidence-backed JSON. Do not infer mental health, personality types, "
-                "clinical conditions, or hidden intentions. Use only evidence from messages and "
-                "the explicit preprocessing features."
+                "Сформируй evidence-backed JSON. Все итоговые summary, claim, task title/description, "
+                "analytics summary и caveats должны быть на русском языке. Не делай выводов о психическом "
+                "здоровье, типах личности, клинических состояниях или скрытых намерениях. Используй только "
+                "доказательства из сообщений и явные preprocessing features. "
+                "Если участник с username @ilyasni или именем Ilya встречается в данных, считай его владельцем профиля."
             ),
             "output_schema": schema,
             "canonical_context": canonical_context,
@@ -289,6 +310,30 @@ def _parse_analysis_payload(
     data["source_window_id"] = source_window_id
     result = StructuredAnalysisResult.model_validate(data)
     return _sanitize_result(result, messages=messages, features=features)
+
+
+def _translation_system_prompt() -> str:
+    return (
+        "Ты переводишь уже структурированный результат анализа переписки в итоговый JSON на русском языке. "
+        "Верни только строгий JSON. Не меняй source_window_id, participants, confidence, "
+        "evidence_message_ids, числовые значения, даты, kind и прочие служебные поля. "
+        "Переводи только человекочитаемые текстовые поля: summary, topics, claim, subject, object, "
+        "task title/description, analytics summary, caveats."
+    )
+
+
+def _translation_user_prompt(result: StructuredAnalysisResult) -> str:
+    return json.dumps(
+        {
+            "instruction": (
+                "Переведи все человекочитаемые текстовые поля этого JSON на русский язык. "
+                "Сохрани структуру и все служебные поля без изменений."
+            ),
+            "analysis_result": result.model_dump(mode="json"),
+        },
+        ensure_ascii=False,
+        default=str,
+    )
 
 
 def _sanitize_result(
@@ -366,10 +411,10 @@ def _heuristic_analysis(
                 kind="contact",
                 predicate="shared_email",
                 object=email,
-                claim=f"An email address was shared: {email}.",
+                claim=f"В переписке был передан адрес электронной почты: {email}.",
                 confidence=0.72,
                 evidence_message_ids=[first_message_id],
-                caveats=["Extracted with deterministic preprocessing."],
+                caveats=["Извлечено детерминированным preprocessing без семантической интерпретации."],
             )
         )
     for phone in features.phones:
@@ -378,10 +423,10 @@ def _heuristic_analysis(
                 kind="contact",
                 predicate="shared_phone",
                 object=phone,
-                claim=f"A phone number was shared: {phone}.",
+                claim=f"В переписке был передан номер телефона: {phone}.",
                 confidence=0.7,
                 evidence_message_ids=[first_message_id],
-                caveats=["Extracted with deterministic preprocessing."],
+                caveats=["Извлечено детерминированным preprocessing без семантической интерпретации."],
             )
         )
     for link in features.links[:3]:
@@ -390,10 +435,10 @@ def _heuristic_analysis(
                 kind="fact",
                 predicate="shared_link",
                 object=link,
-                claim=f"A link was shared: {link}.",
+                claim=f"В переписке была отправлена ссылка: {link}.",
                 confidence=0.68,
                 evidence_message_ids=[first_message_id],
-                caveats=["Link shared in the current window."],
+                caveats=["Ссылка встречается в текущем окне сообщений."],
             )
         )
 
@@ -402,11 +447,12 @@ def _heuristic_analysis(
         if _TASK_HINT_RE.search(msg.text or ""):
             tasks.append(
                 StructuredTask(
-                    title=(msg.text or "").strip()[:120] or "Follow up",
+                    title=_heuristic_task_title(msg.text or ""),
+                    description=None,
                     priority=3,
                     confidence=0.55,
                     evidence_message_ids=[msg.tg_message_id],
-                    caveats=["Heuristic task extraction."],
+                    caveats=["Задача выделена эвристически, без подтверждения внешней LLM."],
                 )
             )
             if len(tasks) >= 3:
@@ -421,8 +467,44 @@ def _heuristic_analysis(
         tasks=tasks,
         analytics_signals=_heuristic_signals(messages=messages, features=features),
         confidence=0.58,
-        caveats=["Generated without remote LLM output."],
+        caveats=["Результат сформирован без ответа внешней LLM."],
     )
+
+
+def _heuristic_task_title(text: str) -> str:
+    cleaned = " ".join(text.strip().split())
+    if not cleaned:
+        return "Нужен follow-up по сообщению"
+    if len(cleaned) <= 84:
+        return f"Нужно проверить: {cleaned}"
+    return f"Нужно проверить: {cleaned[:81].rstrip()}..."
+
+
+def _needs_russian_translation(
+    result: StructuredAnalysisResult,
+    *,
+    target_language: str,
+) -> bool:
+    if target_language.strip().casefold() != "ru":
+        return False
+    return any(_looks_mostly_latin(text) for text in _human_readable_texts(result))
+
+
+def _human_readable_texts(result: StructuredAnalysisResult) -> list[str]:
+    texts: list[str] = [result.summary, *result.topics, *result.caveats]
+    for claim in result.claims:
+        texts.extend([claim.claim, claim.subject or "", claim.object or "", *claim.caveats])
+    for task in result.tasks:
+        texts.extend([task.title, task.description or "", *task.caveats])
+    for signal in result.analytics_signals:
+        texts.append(signal.summary)
+    return [text for text in texts if text.strip()]
+
+
+def _looks_mostly_latin(text: str) -> bool:
+    latin = sum("a" <= char.casefold() <= "z" for char in text)
+    cyrillic = sum("а" <= char.casefold() <= "я" or char in {"Ё", "ё"} for char in text)
+    return latin >= 3 and latin > cyrillic
 
 
 def _heuristic_signals(
@@ -449,42 +531,42 @@ def _heuristic_signals(
         AnalyticsSignal(
             kind="responsiveness",
             score=round(responsiveness, 3),
-            summary="Estimated from message-to-message response gaps.",
+            summary="Оценка построена по паузам между ответами собеседников.",
             evidence_message_ids=evidence,
             payload={"median_response_latency_sec": latency},
         ),
         AnalyticsSignal(
             kind="initiative_balance",
             score=round(max(initiative_balance, 0.0), 3),
-            summary="Estimated from sender activity distribution in the window.",
+            summary="Оценка построена по распределению активности между участниками окна.",
             evidence_message_ids=evidence,
             payload={"author_activity": features.author_activity},
         ),
         AnalyticsSignal(
             kind="topic_drift",
             score=round(drift, 3),
-            summary="Estimated from keyword overlap between the first and second half of the window.",
+            summary="Оценка построена по пересечению ключевых слов между первой и второй половиной окна.",
             evidence_message_ids=evidence,
             payload={"keyword_candidates": features.keyword_candidates},
         ),
         AnalyticsSignal(
             kind="friction",
             score=round(min(max(friction, 0.0), 1.0), 3),
-            summary="Estimated from tone and negative urgency hints.",
+            summary="Оценка построена по тону сообщений и признакам негативной срочности.",
             evidence_message_ids=evidence,
             payload={"sentiment_hint": features.sentiment_hint},
         ),
         AnalyticsSignal(
             kind="conversation_health",
             score=round(health, 3),
-            summary="Composite signal from responsiveness, initiative balance, and friction.",
+            summary="Сводная оценка на основе отзывчивости, баланса инициативы и уровня напряжения.",
             evidence_message_ids=evidence,
             payload={},
         ),
         AnalyticsSignal(
             kind="activity",
             score=round(activity, 3),
-            summary="Estimated from message count within the window.",
+            summary="Оценка построена по количеству сообщений внутри окна.",
             evidence_message_ids=evidence,
             payload={"message_count": features.message_count},
         ),

@@ -79,7 +79,7 @@ def build_analysis_graph(
     def validate_result(state: AnalysisState) -> AnalysisState:
         result = state["result"]
         if not result.summary.strip():
-            result = result.model_copy(update={"summary": "No evidence-backed summary available."})
+            result = result.model_copy(update={"summary": "Недостаточно данных для доказательного резюме."})
         return {"result": result}
 
     def build_projection(state: AnalysisState) -> AnalysisState:

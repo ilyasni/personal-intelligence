@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     analysis_llm_mode: str = "hybrid"
     analysis_max_tokens_out: int = 900
+    analysis_output_language: str = "ru"
 
     wormsoft_api_base: str = "https://ai.wormsoft.ru/api/gpt"
     wormsoft_api_key: str = ""

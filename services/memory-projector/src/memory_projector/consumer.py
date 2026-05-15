@@ -79,10 +79,18 @@ async def _ensure_person(
     topics: list[str],
     last_interaction_at: Any,
 ) -> str:
+    is_owner = _matches_owner_identity(
+        tg_user_id=tg_user_id,
+        username=username,
+        display_name=display_name,
+    )
+    effective_display_name = display_name or f"tg:{tg_user_id}"
+    if is_owner and settings.owner_primary_display_name.strip():
+        effective_display_name = settings.owner_primary_display_name.strip()
     row = await conn.fetchrow(
         """
-        INSERT INTO person (tg_user_id, username, display_name, topics, last_interaction_at)
-        VALUES ($1, $2, $3, $4::text[], $5)
+        INSERT INTO person (tg_user_id, username, display_name, topics, last_interaction_at, is_owner)
+        VALUES ($1, $2, $3, $4::text[], $5, $6)
         ON CONFLICT (tg_user_id) DO UPDATE
         SET username = COALESCE(EXCLUDED.username, person.username),
             display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), person.display_name),
@@ -94,16 +102,36 @@ async def _ensure_person(
                 )
             ),
             last_interaction_at = GREATEST(person.last_interaction_at, EXCLUDED.last_interaction_at),
+            is_owner = person.is_owner OR EXCLUDED.is_owner,
             updated_at = now()
         RETURNING id
         """,
         tg_user_id,
         username,
-        display_name or f"tg:{tg_user_id}",
+        effective_display_name,
         topics,
         last_interaction_at,
+        is_owner,
     )
     return str(row["id"])
+
+
+def _matches_owner_identity(
+    *,
+    tg_user_id: int,
+    username: str | None,
+    display_name: str | None,
+) -> bool:
+    if tg_user_id in settings.owner_tg_user_id_set():
+        return True
+    normalized_username = (username or "").strip().lstrip("@").casefold()
+    if normalized_username and normalized_username in settings.owner_username_set():
+        return True
+    normalized_display_name = (display_name or "").strip().casefold()
+    return bool(
+        normalized_display_name
+        and normalized_display_name in settings.owner_display_name_set()
+    )
 
 
 async def _ensure_participants(
@@ -274,7 +302,6 @@ async def _replace_signals(conn: asyncpg.Connection, window_id: str, command: Pr
 async def _find_task_for_evidence(
     conn: asyncpg.Connection,
     chat_id: str,
-    title: str,
     evidence_message_id: int,
 ) -> str | None:
     row = await conn.fetchrow(
@@ -282,13 +309,14 @@ async def _find_task_for_evidence(
         SELECT id
         FROM task
         WHERE chat_id = $1::uuid
-          AND title = $2
-          AND (source_message_ref->>'tg_message_id')::bigint = $3
-        ORDER BY created_at DESC
+          AND (source_message_ref->>'tg_message_id')::bigint = $2
+        ORDER BY
+          CASE WHEN owner_person_id IS NOT NULL THEN 0 ELSE 1 END,
+          updated_at DESC,
+          created_at DESC
         LIMIT 1
         """,
         chat_id,
-        title,
         evidence_message_id,
     )
     return str(row["id"]) if row else None
@@ -312,8 +340,32 @@ async def _sync_tasks(
     first_counterpart = next(iter(participant_map.values()), None)
     for task in command.result.tasks:
         evidence_id = task.evidence_message_ids[0] if task.evidence_message_ids else 0
-        existing_id = await _find_task_for_evidence(conn, chat_id, task.title, evidence_id)
+        existing_id = await _find_task_for_evidence(conn, chat_id, evidence_id)
         if existing_id:
+            await conn.execute(
+                """
+                UPDATE task
+                SET title = $2,
+                    description = COALESCE($3, description),
+                    owner_person_id = COALESCE($4::uuid, owner_person_id),
+                    counterpart_person_id = COALESCE($5::uuid, counterpart_person_id),
+                    due_at = COALESCE($6, due_at),
+                    priority = $7,
+                    confidence = $8,
+                    evidence = COALESCE($9, evidence),
+                    updated_at = now()
+                WHERE id = $1::uuid
+                """,
+                existing_id,
+                task.title,
+                task.description,
+                owner_person_id,
+                first_counterpart,
+                task.due_at,
+                task.priority,
+                Decimal(str(task.confidence)),
+                "; ".join(task.caveats) if task.caveats else None,
+            )
             tasks.append(existing_id)
             continue
         row = await conn.fetchrow(
@@ -574,10 +626,10 @@ def _build_embedding_job(
 ) -> EmbeddingJob:
     narrative_parts = [command.result.summary]
     if command.result.topics:
-        narrative_parts.append("Topics: " + ", ".join(command.result.topics))
+        narrative_parts.append("Темы: " + ", ".join(command.result.topics))
     if command.result.claims:
         narrative_parts.append(
-            "Facts: " + " ".join(claim.claim for claim in command.result.claims[:6])
+            "Факты: " + " ".join(claim.claim for claim in command.result.claims[:6])
         )
     narrative_text = "\n".join(part for part in narrative_parts if part.strip())
     return EmbeddingJob(
