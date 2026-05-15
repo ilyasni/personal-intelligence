@@ -17,12 +17,13 @@ Qdrant и Neo4j считаются derived projections, которые можн�
 
 Сообщения владельца не должны трактоваться как "ещё одна персона в списке контактов". Они должны использоваться как first-party context для интерпретации людей, чатов, задач и retrieval.
 
-Текущий runtime ещё использует переходную backing record в `person(is_owner=true)`, но это transitional compatibility layer, а не целевая knowledge model.
+Текущий runtime уже хранит канонический `owner_profile`, но всё ещё использует переходную backing record в `person(is_owner=true)` для совместимости с частью pipeline и detail/read-path логики.
 
 ## Postgres
 
 В Postgres хранятся:
 
+- `owner_profile`
 - `person`
 - `chat`
 - `chat_membership`
@@ -49,7 +50,7 @@ Qdrant и Neo4j считаются derived projections, которые можн�
 
 Это нужно, чтобы бизнес- и личные сегменты не зависели только от AI-интерпретации.
 
-Но эти поля относятся к внешним людям. Для самого владельца нужен отдельный first-party profile layer, а не self-contact в `person`.
+Но эти поля относятся к внешним людям. Для самого владельца уже используется отдельный first-party profile layer `owner_profile`, а не self-contact в `person`.
 
 ## Qdrant
 

@@ -113,6 +113,36 @@ class Person(Base):
     )
 
 
+class OwnerProfile(Base):
+    """First-party профиль владельца инстанса."""
+
+    __tablename__ = "owner_profile"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid4)
+    backing_person_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("person.id", ondelete="SET NULL"),
+        unique=True,
+    )
+    tg_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
+    username: Mapped[str | None] = mapped_column(Text)
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    preferred_language: Mapped[str] = mapped_column(Text, nullable=False, default="ru")
+    context_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    profile_notes: Mapped[str | None] = mapped_column(Text)
+    last_interaction_at: Mapped[datetime | None] = mapped_column(TZ)
+    created_at: Mapped[datetime] = mapped_column(TZ, nullable=False, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(TZ, nullable=False, default=_now, onupdate=_now)
+
+    backing_person: Mapped["Person | None"] = relationship()
+
+    __table_args__ = (
+        CheckConstraint("preferred_language IN ('ru','en')", name="ck_owner_profile_language"),
+        Index("idx_owner_profile_username", "username"),
+        Index("idx_owner_profile_context_tags_gin", "context_tags", postgresql_using="gin"),
+    )
+
+
 class ChatMembership(Base):
     """Кто в каком чате."""
 

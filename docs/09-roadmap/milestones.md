@@ -36,6 +36,7 @@
 | E-03 | Admin UI baseline | E | DONE | codex | runtime-v1.1.0 | multi-page operator UI with overview, conversations, tasks, people, chats, operator actions, detail drill-downs, flash UX, person block controls, and direct LAN entrypoint |
 | E-04 | Person manual tags and notes | E | DONE | codex | runtime-v1.1.3 | canonical `person.manual_tags` + owner comment editing in admin UI, plus filtering by manual tag for segmentation |
 | E-05 | Owner identity reset | E | DONE | codex | runtime-v1.1.4 | owner separated from ordinary people UX, new `/admin/me`, people list treated as external-only, docs updated toward `owner_profile` + `relationship_annotation` target model |
+| E-06 | Canonical `owner_profile` | E | DONE | codex | runtime-v1.1.5 | additive Postgres table + backfill from `person.is_owner`, `/admin/me` edits first-party context directly, transitional backing record kept only for compatibility |
 | F-01 | Cutover verification | F | DONE | codex | runtime-v1.0.1 | canonical compose live on server, smoke strict green, cutover audit green, orphan groups absent |
 | F-02 | Deploy automation | F | DONE | codex | runtime-v1.0.5 | manual GitHub Actions deploy + remote rollout script + containerized migration-runner |
 
@@ -65,6 +66,7 @@
 | sprint-19 | 2026-05-15 | E-03 localization follow-up | owner identity normalized and AI outputs moved to Russian-first mode | legacy English task data required a one-time cleanup pass in addition to pipeline fixes |
 | sprint-20 | 2026-05-15 | E-04 | manual person tags and owner comments online | canonical segmentation works best when tags live in Postgres and are editable directly from operator UI |
 | sprint-21 | 2026-05-15 | E-05 | owner identity reset applied to admin UX and docs | first-party owner context should not be modeled as just another external person |
+| sprint-22 | 2026-05-15 | E-06 | canonical owner profile landed in runtime and admin UI | additive migration + compatibility fallback let us evolve identity modeling without breaking existing windows/tasks |
 
 ## Releases
 
@@ -94,6 +96,7 @@
 | v1.1.2 | 2026-05-15 | owner identity normalization + Russian-first AI output baseline | runtime-v1.1.2 |
 | v1.1.3 | 2026-05-15 | manual person tags, owner comments, and people-list segmentation filter | runtime-v1.1.3 |
 | v1.1.4 | 2026-05-15 | owner identity reset in admin UX + canonical docs alignment | runtime-v1.1.4 |
+| v1.1.5 | 2026-05-15 | canonical `owner_profile` table + first-party `/admin/me` editing path | runtime-v1.1.5 |
 
 ## Open questions
 
@@ -103,4 +106,4 @@
 - profile switching / re-embedding workflows beyond initial alias bootstrap
 - privacy / erase cascade hardening for analytics and vector projections
 - stricter controlled vocabulary or relationship labels on top of free-form manual tags
-- canonical `owner_profile` and `relationship_annotation` tables instead of transitional `person.is_owner`
+- canonical `relationship_annotation` table so owner context toward specific people/chats stops overloading free-form tags

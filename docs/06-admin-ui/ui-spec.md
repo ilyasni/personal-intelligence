@@ -73,9 +73,11 @@ Web SPA для владельца инсталляции. Один пользо�
 - Не трактуется как ordinary person card.
 - Содержит:
   - стабильный owner context;
+  - editable `context tags`, `preferred language`, `profile notes`;
   - рабочие/личные сегменты;
   - recent windows, в которых owner участвовал;
   - explainable note, что этот профиль влияет на анализ людей, чатов и задач.
+  - в текущем server-rendered runtime хранится в канонической таблице `owner_profile`, а historical windows/tasks пока читаются через compatibility backing record.
 
 ### Person card
 - Header: avatar, display_name, username, action menu (erase, export, block).

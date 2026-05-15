@@ -30,10 +30,15 @@
       {% if detail.person.organizations_hidden_count %}+ ещё {{ detail.person.organizations_hidden_count }}{% endif %}
     </span>
     <span>
+      {% if detail.owner_profile_mode %}
+      Контекстные теги: {{ detail.owner_profile.context_tags_preview|csvish }}
+      {% if detail.owner_profile.context_tags_hidden_count %}+ ещё {{ detail.owner_profile.context_tags_hidden_count }}{% endif %}
+      {% else %}
       Мои теги: {{ (detail.person.manual_tags_preview or detail.person.manual_tags)|csvish }}
       {% if detail.person.manual_tags_hidden_count %}+ ещё {{ detail.person.manual_tags_hidden_count }}{% endif %}
+      {% endif %}
     </span>
-    <span>Статус: {% if detail.person.blocked %}заблокирован{% else %}активен{% endif %}</span>
+    <span>{% if detail.owner_profile_mode %}Язык: {{ detail.owner_profile.preferred_language|upper }}{% else %}Статус: {% if detail.person.blocked %}заблокирован{% else %}активен{% endif %}{% endif %}</span>
   </div>
 </section>
 
@@ -41,14 +46,43 @@
   {% if detail.owner_profile_mode %}
   <article class="panel">
     <div class="panel-header">
-      <h3>Переходный режим</h3>
+      <h3>Контекст владельца</h3>
     </div>
+    <form method="post" action="/admin/me" class="annotation-form">
+      <div class="field-group">
+        <label for="context_tags">Контекстные теги владельца</label>
+        <input
+          id="context_tags"
+          type="text"
+          name="context_tags"
+          value="{{ detail.owner_profile.context_tags|join(', ') }}"
+          placeholder="работа, семья, pet-проект, pil, frontier"
+        />
+        <p class="helper-text">Эти теги подаются в LLM как first-party контекст и помогают сегментировать людей, чаты и задачи.</p>
+      </div>
+      <div class="field-group">
+        <label for="preferred_language">Предпочитаемый язык анализа</label>
+        <select id="preferred_language" name="preferred_language">
+          <option value="ru" {% if detail.owner_profile.preferred_language == "ru" %}selected{% endif %}>Русский</option>
+          <option value="en" {% if detail.owner_profile.preferred_language == "en" %}selected{% endif %}>English</option>
+        </select>
+        <p class="helper-text">Используется как стабильная языковая настройка для промптов, сводок и операторской аналитики.</p>
+      </div>
+      <div class="field-group">
+        <label for="profile_notes">Заметка о владельце</label>
+        <textarea
+          id="profile_notes"
+          name="profile_notes"
+          rows="6"
+          placeholder="Например: основная рабочая зона — Frontier и PIL; важны русские summaries; рабочие контакты можно приоритизировать утром."
+        >{{ detail.owner_profile.profile_notes or "" }}</textarea>
+      </div>
+      <div class="action-row">
+        <button type="submit" class="button">Сохранить контекст</button>
+      </div>
+    </form>
     <p class="inline-note">
-      Этот раздел показывает first-party профиль владельца. Технически он пока опирается на переходную запись в `person`,
-      но в канонической архитектуре больше не трактуется как обычная внешняя персона.
-    </p>
-    <p class="panel-copy">
-      Сообщения владельца используются как контекст для интерпретации людей, чатов и задач, а не как ещё одна карточка в адресной книге.
+      Канонический first-party профиль уже хранится отдельно, но recent windows, задачи и часть графовых связей пока читаются через совместимый backing record.
     </p>
   </article>
   {% else %}

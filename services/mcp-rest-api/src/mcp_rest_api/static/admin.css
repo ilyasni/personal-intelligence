@@ -332,6 +332,7 @@ th {
 }
 
 .field-group input,
+.field-group select,
 .field-group textarea,
 .filter-form input {
   width: 100%;

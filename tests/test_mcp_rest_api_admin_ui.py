@@ -15,6 +15,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
         "allowlist_updates": [],
         "person_block_updates": [],
         "person_annotation_updates": [],
+        "owner_profile_updates": [],
     }
 
     async def fake_overview(_app: Any, days: int = 14) -> dict[str, Any]:
@@ -176,6 +177,19 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
                 "blocked": False,
                 "is_owner": True,
             },
+            "owner_profile": {
+                "id": "owner-profile-1",
+                "backing_person_id": "owner-1",
+                "tg_user_id": 139883458,
+                "username": "ilyasni",
+                "display_name": "Ilya",
+                "preferred_language": "ru",
+                "context_tags": ["работа", "pil"],
+                "context_tags_preview": ["работа", "pil"],
+                "context_tags_hidden_count": 0,
+                "profile_notes": "Русский — основной язык аналитики.",
+                "last_interaction_at": "2026-05-14 08:20",
+            },
             "recent_windows": [{"id": "window-1", "summary": "Discussed rollout details.", "window_end": "2026-05-14 08:15"}],
             "tasks": [{"title": "Ship admin UI", "description": "Finish operator screens", "status": "open", "due_at": "2026-05-15 10:00"}],
             "graph_neighbors": [],
@@ -220,6 +234,15 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     ) -> None:
         state["person_annotation_updates"].append((person_id, manual_tags, notes))
 
+    async def fake_update_owner_profile(
+        _app: Any,
+        *,
+        context_tags: list[str],
+        profile_notes: str | None,
+        preferred_language: str,
+    ) -> None:
+        state["owner_profile_updates"].append((context_tags, profile_notes, preferred_language))
+
     monkeypatch.setattr(mcp_app, "get_analytics_overview_data", fake_overview)
     monkeypatch.setattr(mcp_app, "get_conversation_data", fake_conversations)
     monkeypatch.setattr(mcp_app, "get_open_tasks_data", fake_tasks)
@@ -234,6 +257,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(mcp_app, "set_chat_allowlist", fake_set_chat_allowlist)
     monkeypatch.setattr(mcp_app, "set_person_blocked", fake_set_person_blocked)
     monkeypatch.setattr(mcp_app, "update_person_annotations", fake_update_person_annotations)
+    monkeypatch.setattr(mcp_app, "update_owner_profile", fake_update_owner_profile)
     return mcp_app.create_app(use_lifespan=False), state
 
 
@@ -296,6 +320,27 @@ def test_admin_me_renders_owner_profile(monkeypatch: pytest.MonkeyPatch) -> None
     assert "Профиль владельца" in response.text
     assert "first-party" in response.text
     assert "Ilya" in response.text
+    assert "Русский" in response.text
+    assert "работа, pil" in response.text
+
+
+def test_admin_me_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.post(
+            "/admin/me",
+            data={
+                "context_tags": "Работа, семья, pil",
+                "profile_notes": "Держать summaries на русском.",
+                "preferred_language": "ru",
+            },
+            follow_redirects=False,
+        )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/me?flash=owner_profile_saved"
+    assert state["owner_profile_updates"] == [
+        (["работа", "семья", "pil"], "Держать summaries на русском.", "ru")
+    ]
 
 
 def test_owner_person_route_redirects_to_admin_me(monkeypatch: pytest.MonkeyPatch) -> None:

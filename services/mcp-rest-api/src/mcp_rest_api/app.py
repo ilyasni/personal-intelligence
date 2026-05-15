@@ -176,6 +176,19 @@ class PersonAnnotationsForm(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class OwnerProfileForm(BaseModel):
+    context_tags: str = ""
+    profile_notes: str = ""
+    preferred_language: str = "ru"
+
+    model_config = {"extra": "forbid"}
+
+
+def _normalize_preferred_language(value: str | None) -> str:
+    normalized = (value or "").strip().casefold()
+    return normalized if normalized in {"ru", "en"} else "ru"
+
+
 FLASH_MESSAGES = {
     "window_requeued": ("success", "Окно добавлено в очередь на повторную обработку."),
     "task_status_done": ("success", "Задача переведена в статус «выполнено»."),
@@ -186,6 +199,7 @@ FLASH_MESSAGES = {
     "person_blocked": ("warn", "Профиль заблокирован для ingestion и дальнейшей обработки."),
     "person_unblocked": ("success", "Профиль разблокирован и снова участвует в обработке."),
     "person_annotations_saved": ("success", "Теги и комментарий сохранены."),
+    "owner_profile_saved": ("success", "Контекст владельца сохранён."),
     "owner_profile_readonly": ("info", "Профиль владельца вынесен в отдельный first-party раздел и не редактируется как обычная персона."),
 }
 
@@ -335,9 +349,8 @@ async def get_analytics_overview_data(app: FastAPI, days: int = 14) -> dict[str,
         people = await conn.fetchrow(
             """
             SELECT
-                count(*) FILTER (WHERE is_owner = FALSE)::int AS people_count,
-                count(*) FILTER (WHERE is_owner = TRUE)::int AS owner_profile_count
-            FROM person
+                (SELECT count(*)::int FROM person WHERE is_owner = FALSE) AS people_count,
+                (SELECT count(*)::int FROM owner_profile) AS owner_profile_count
             """
         )
         chats = await conn.fetchrow("SELECT count(*)::int AS chat_count FROM chat")
@@ -447,6 +460,17 @@ async def get_people_data(
 async def get_owner_person_id(app: FastAPI) -> str:
     pool: asyncpg.Pool = app.state.db_pool
     async with pool.acquire() as conn:
+        owner_profile_row = await conn.fetchrow(
+            """
+            SELECT backing_person_id
+            FROM owner_profile
+            WHERE backing_person_id IS NOT NULL
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+        )
+        if owner_profile_row is not None and owner_profile_row["backing_person_id"] is not None:
+            return str(owner_profile_row["backing_person_id"])
         row = await conn.fetchrow(
             """
             SELECT id
@@ -459,6 +483,40 @@ async def get_owner_person_id(app: FastAPI) -> str:
     if row is None:
         raise HTTPException(status_code=404, detail="owner_profile_not_found")
     return str(row["id"])
+
+
+async def get_owner_profile_record(app: FastAPI) -> dict[str, Any] | None:
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT
+                id,
+                backing_person_id,
+                tg_user_id,
+                username,
+                display_name,
+                preferred_language,
+                context_tags,
+                profile_notes,
+                last_interaction_at,
+                created_at,
+                updated_at
+            FROM owner_profile
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+        )
+    if row is None:
+        return None
+    item = dict(row)
+    item["context_tags"] = _normalize_string_list(item.get("context_tags"))
+    item["context_tags_preview"], item["context_tags_hidden_count"] = _list_preview(
+        item["context_tags"],
+        limit=8,
+    )
+    item["preferred_language"] = _normalize_preferred_language(cast("str | None", item.get("preferred_language")))
+    return item
 
 
 async def get_chat_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
@@ -623,8 +681,34 @@ async def get_chat_detail_data(app: FastAPI, chat_id: str) -> dict[str, Any]:
 
 
 async def get_owner_profile_data(app: FastAPI) -> dict[str, Any]:
-    owner_person_id = await get_owner_person_id(app)
+    owner_profile = await get_owner_profile_record(app)
+    owner_person_id = (
+        str(owner_profile["backing_person_id"])
+        if owner_profile is not None and owner_profile.get("backing_person_id") is not None
+        else await get_owner_person_id(app)
+    )
     detail = await get_person_detail_data(app, owner_person_id)
+    if owner_profile is None:
+        owner_profile = {
+            "id": None,
+            "backing_person_id": detail["person"]["id"],
+            "tg_user_id": detail["person"].get("tg_user_id"),
+            "username": detail["person"].get("username"),
+            "display_name": detail["person"].get("display_name"),
+            "preferred_language": "ru",
+            "context_tags": [],
+            "context_tags_preview": [],
+            "context_tags_hidden_count": 0,
+            "profile_notes": detail["person"].get("notes"),
+            "last_interaction_at": detail["person"].get("last_interaction_at"),
+        }
+    detail["person"]["display_name"] = owner_profile.get("display_name") or detail["person"].get("display_name")
+    detail["person"]["username"] = owner_profile.get("username") or detail["person"].get("username")
+    detail["person"]["tg_user_id"] = owner_profile.get("tg_user_id") or detail["person"].get("tg_user_id")
+    detail["person"]["last_interaction_at"] = owner_profile.get("last_interaction_at") or detail["person"].get(
+        "last_interaction_at"
+    )
+    detail["owner_profile"] = owner_profile
     detail["owner_profile_mode"] = True
     return detail
 
@@ -689,6 +773,80 @@ async def update_person_annotations(
         )
     if result.endswith("0"):
         raise HTTPException(status_code=404, detail="person_not_found")
+
+
+async def update_owner_profile(
+    app: FastAPI,
+    *,
+    context_tags: list[str],
+    profile_notes: str | None,
+    preferred_language: str,
+) -> None:
+    pool: asyncpg.Pool = app.state.db_pool
+    owner_profile = await get_owner_profile_record(app)
+    owner_person_id = await get_owner_person_id(app)
+    async with pool.acquire() as conn:
+        owner_person = await conn.fetchrow(
+            """
+            SELECT tg_user_id, username, display_name, last_interaction_at, notes
+            FROM person
+            WHERE id = $1::uuid
+            """,
+            owner_person_id,
+        )
+        if owner_person is None:
+            raise HTTPException(status_code=404, detail="owner_profile_not_found")
+        if owner_profile is None:
+            await conn.execute(
+                """
+                INSERT INTO owner_profile (
+                    backing_person_id,
+                    tg_user_id,
+                    username,
+                    display_name,
+                    preferred_language,
+                    context_tags,
+                    profile_notes,
+                    last_interaction_at
+                )
+                VALUES ($1::uuid, $2, $3, $4, $5, $6::text[], $7, $8)
+                """,
+                owner_person_id,
+                owner_person["tg_user_id"],
+                owner_person["username"],
+                owner_person["display_name"],
+                preferred_language,
+                context_tags,
+                profile_notes,
+                owner_person["last_interaction_at"],
+            )
+            return
+        result = await conn.execute(
+            """
+            UPDATE owner_profile
+            SET preferred_language = $2,
+                context_tags = $3::text[],
+                profile_notes = $4,
+                backing_person_id = COALESCE(backing_person_id, $5::uuid),
+                tg_user_id = COALESCE(tg_user_id, $6),
+                username = COALESCE(username, $7),
+                display_name = COALESCE(display_name, $8),
+                last_interaction_at = COALESCE($9, last_interaction_at),
+                updated_at = now()
+            WHERE id = $1::uuid
+            """,
+            owner_profile["id"],
+            preferred_language,
+            context_tags,
+            profile_notes,
+            owner_person_id,
+            owner_person["tg_user_id"],
+            owner_person["username"],
+            owner_person["display_name"],
+            owner_person["last_interaction_at"],
+        )
+    if result.endswith("0"):
+        raise HTTPException(status_code=404, detail="owner_profile_not_found")
 
 
 async def set_chat_allowlist(app: FastAPI, chat_id: str, *, is_allowed: bool) -> None:
@@ -923,6 +1081,20 @@ async def admin_me(request: Request) -> HTMLResponse:
             detail=detail,
         ),
     )
+
+
+@router.post("/admin/me", include_in_schema=False)
+async def admin_me_update(
+    request: Request,
+    form_data: Annotated[OwnerProfileForm, Form()],
+) -> RedirectResponse:
+    await update_owner_profile(
+        request.app,
+        context_tags=_parse_manual_tags(form_data.context_tags),
+        profile_notes=_normalize_optional_text(form_data.profile_notes),
+        preferred_language=_normalize_preferred_language(form_data.preferred_language),
+    )
+    return _redirect_with_flash("/admin/me", "owner_profile_saved")
 
 
 @router.get("/admin/conversations", response_class=HTMLResponse, include_in_schema=False)

@@ -81,6 +81,38 @@ CREATE INDEX idx_person_manual_tags_gin ON person USING GIN(manual_tags);
 - owner — отдельный `owner_profile`;
 - ручной контекст владельца относительно конкретного человека или чата — отдельная сущность `relationship_annotation`, а не самоописание owner как контакта.
 
+Текущий runtime:
+
+- owner уже вынесен в отдельную таблицу `owner_profile`;
+- `person.is_owner` пока сохраняется как compatibility flag для части pipeline и historical data;
+- manual tags / notes в `person` относятся только к внешним людям.
+
+### `owner_profile`
+Канонический first-party профиль владельца инстанса.
+```sql
+CREATE TABLE owner_profile (
+  id              UUID PRIMARY KEY DEFAULT uuidv7(),
+  backing_person_id UUID UNIQUE REFERENCES person(id) ON DELETE SET NULL,
+  tg_user_id      BIGINT UNIQUE,
+  username        TEXT,
+  display_name    TEXT NOT NULL,
+  preferred_language TEXT NOT NULL DEFAULT 'ru' CHECK (preferred_language IN ('ru','en')),
+  context_tags    TEXT[] NOT NULL DEFAULT '{}',
+  profile_notes   TEXT,
+  last_interaction_at TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_owner_profile_username ON owner_profile(username);
+CREATE INDEX idx_owner_profile_context_tags_gin ON owner_profile USING GIN(context_tags);
+```
+
+Назначение:
+
+- хранить first-party identity отдельно от списка внешних контактов;
+- задавать стабильный language/context layer для LLM;
+- давать управляемый owner context для сегментации людей, чатов и задач.
+
 ### `chat_membership`
 Кто в каком чате.
 ```sql
