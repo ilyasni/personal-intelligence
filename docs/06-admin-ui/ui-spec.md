@@ -82,11 +82,15 @@ Web SPA для владельца инсталляции. Один пользо�
 ### Person card
 - Header: avatar, display_name, username, action menu (erase, export, block).
 - Эта карточка применяется только к external people.
+- Owner-context panel:
+  - editable `relationship labels` such as `коллега`, `супруга`, `семья`, `pet-проект`;
+  - free-form `relationship note`, describing how this person relates to the owner and how the AI should interpret the contact;
+  - canonical persistence in `relationship_annotation`.
 - Operator annotations panel:
   - editable `manual tags` for segmentation, for example `коллега`, `супруга`, `пет-проект`, `семья`, `клиент`;
   - free-form `owner note`, where владелец может оставить комментарий или контекст;
   - save action with visible last-updated timestamp and actor.
-  - in the current server-rendered admin implementation, tags are edited as one normalized comma-separated field and immediately become available as a people-list filter.
+  - in the current server-rendered admin implementation, relationship labels are edited as one normalized comma-separated field and immediately become available as a people-list filter.
 - Tabs:
   1. **Overview** — bio, topics, organizations, style, trust.
   2. **Interactions** — лента Interaction'ов.

@@ -184,6 +184,14 @@ class OwnerProfileForm(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class RelationshipAnnotationForm(BaseModel):
+    relationship_labels: str = ""
+    relationship_note: str = ""
+    redirect_to: str = "/admin/people"
+
+    model_config = {"extra": "forbid"}
+
+
 def _normalize_preferred_language(value: str | None) -> str:
     normalized = (value or "").strip().casefold()
     return normalized if normalized in {"ru", "en"} else "ru"
@@ -200,6 +208,7 @@ FLASH_MESSAGES = {
     "person_unblocked": ("success", "Профиль разблокирован и снова участвует в обработке."),
     "person_annotations_saved": ("success", "Теги и комментарий сохранены."),
     "owner_profile_saved": ("success", "Контекст владельца сохранён."),
+    "relationship_annotation_saved": ("success", "Контекст отношений сохранён."),
     "owner_profile_readonly": ("info", "Профиль владельца вынесен в отдельный first-party раздел и не редактируется как обычная персона."),
 }
 
@@ -419,34 +428,50 @@ async def get_people_data(
     limit: int = 50,
     *,
     manual_tag: str | None = None,
+    relationship_label: str | None = None,
     include_owner: bool = False,
 ) -> list[dict[str, Any]]:
     pool: asyncpg.Pool = app.state.db_pool
     normalized_manual_tag = _normalize_optional_text(manual_tag)
+    normalized_relationship_label = _normalize_optional_text(relationship_label)
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
+            WITH current_owner AS (
+                SELECT id
+                FROM owner_profile
+                ORDER BY updated_at DESC
+                LIMIT 1
+            )
             SELECT
-                id,
-                tg_user_id,
-                username,
-                display_name,
-                organizations,
-                topics,
-                manual_tags,
-                communication_style,
-                trust_score::float AS trust_score,
-                last_interaction_at,
-                blocked,
-                is_owner
-            FROM person
-            WHERE ($2::text IS NULL OR $2 = ANY(manual_tags))
-              AND ($3::bool OR is_owner = FALSE)
-            ORDER BY COALESCE(last_interaction_at, updated_at) DESC NULLS LAST, created_at DESC
+                p.id,
+                p.tg_user_id,
+                p.username,
+                p.display_name,
+                p.organizations,
+                p.topics,
+                p.manual_tags,
+                p.communication_style,
+                p.trust_score::float AS trust_score,
+                p.last_interaction_at,
+                p.blocked,
+                p.is_owner,
+                COALESCE(ra.labels, ARRAY[]::text[]) AS relationship_labels,
+                ra.note AS relationship_note
+            FROM person p
+            LEFT JOIN current_owner owner ON TRUE
+            LEFT JOIN relationship_annotation ra
+              ON ra.owner_profile_id = owner.id
+             AND ra.person_id = p.id
+            WHERE ($2::text IS NULL OR $2 = ANY(p.manual_tags))
+              AND ($3::text IS NULL OR $3 = ANY(COALESCE(ra.labels, ARRAY[]::text[])))
+              AND ($4::bool OR p.is_owner = FALSE)
+            ORDER BY COALESCE(p.last_interaction_at, p.updated_at) DESC NULLS LAST, p.created_at DESC
             LIMIT $1
             """,
             limit,
             normalized_manual_tag,
+            normalized_relationship_label,
             include_owner,
         )
     items = [dict(row) for row in rows]
@@ -454,6 +479,7 @@ async def get_people_data(
         item["organizations"] = _normalize_string_list(item.get("organizations"))
         item["topics"] = _normalize_string_list(item.get("topics"))
         item["manual_tags"] = _normalize_string_list(item.get("manual_tags"))
+        item["relationship_labels"] = _normalize_string_list(item.get("relationship_labels"))
     return items
 
 
@@ -517,6 +543,13 @@ async def get_owner_profile_record(app: FastAPI) -> dict[str, Any] | None:
     )
     item["preferred_language"] = _normalize_preferred_language(cast("str | None", item.get("preferred_language")))
     return item
+
+
+async def get_current_owner_profile_id(app: FastAPI) -> str:
+    owner_profile = await get_owner_profile_record(app)
+    if owner_profile is None or owner_profile.get("id") is None:
+        raise HTTPException(status_code=404, detail="owner_profile_not_found")
+    return str(owner_profile["id"])
 
 
 async def get_chat_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
@@ -849,6 +882,40 @@ async def update_owner_profile(
         raise HTTPException(status_code=404, detail="owner_profile_not_found")
 
 
+async def update_person_relationship_annotation(
+    app: FastAPI,
+    person_id: str,
+    *,
+    labels: list[str],
+    note: str | None,
+) -> None:
+    pool: asyncpg.Pool = app.state.db_pool
+    owner_profile_id = await get_current_owner_profile_id(app)
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            INSERT INTO relationship_annotation (
+                owner_profile_id,
+                person_id,
+                labels,
+                note
+            )
+            VALUES ($1::uuid, $2::uuid, $3::text[], $4)
+            ON CONFLICT (owner_profile_id, person_id)
+            DO UPDATE SET
+                labels = EXCLUDED.labels,
+                note = EXCLUDED.note,
+                updated_at = now()
+            """,
+            owner_profile_id,
+            person_id,
+            labels,
+            note,
+        )
+    if not result.startswith(("INSERT", "UPDATE")):
+        raise HTTPException(status_code=500, detail="relationship_annotation_write_failed")
+
+
 async def set_chat_allowlist(app: FastAPI, chat_id: str, *, is_allowed: bool) -> None:
     pool: asyncpg.Pool = app.state.db_pool
     async with pool.acquire() as conn:
@@ -870,6 +937,7 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
     pool: asyncpg.Pool = app.state.db_pool
     qdrant: AsyncQdrantClient = app.state.qdrant
     neo4j_driver = app.state.neo4j_driver
+    owner_profile_id = await get_current_owner_profile_id(app)
 
     async with pool.acquire() as conn:
         person = await conn.fetchrow(
@@ -893,6 +961,21 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
         )
         if person is None:
             raise HTTPException(status_code=404, detail="person_not_found")
+
+        relationship_annotation = await conn.fetchrow(
+            """
+            SELECT
+                labels,
+                note,
+                updated_at
+            FROM relationship_annotation
+            WHERE owner_profile_id = $1::uuid
+              AND person_id = $2::uuid
+            LIMIT 1
+            """,
+            owner_profile_id,
+            person_id,
+        )
 
         windows: list[asyncpg.Record] = []
         if person["tg_user_id"] is not None:
@@ -982,9 +1065,17 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
         person_payload["manual_tags"],
         limit=8,
     )
+    relationship_payload = dict(relationship_annotation) if relationship_annotation is not None else {}
+    relationship_payload["labels"] = _normalize_string_list(relationship_payload.get("labels"))
+    relationship_payload["labels_preview"], relationship_payload["labels_hidden_count"] = _list_preview(
+        relationship_payload["labels"],
+        limit=8,
+    )
+    relationship_payload["note"] = _normalize_optional_text(cast("str | None", relationship_payload.get("note")))
 
     return {
         "person": person_payload,
+        "relationship_annotation": relationship_payload,
         "recent_windows": [dict(row) for row in windows],
         "semantic_memory": semantic_hits,
         "semantic_memory_preview": _semantic_memory_preview_items(semantic_hits),
@@ -1162,7 +1253,12 @@ async def admin_task_status(
 
 
 @router.get("/admin/people", response_class=HTMLResponse, include_in_schema=False)
-async def admin_people(request: Request, limit: int = 50, manual_tag: str | None = None) -> HTMLResponse:
+async def admin_people(
+    request: Request,
+    limit: int = 50,
+    manual_tag: str | None = None,
+    relationship_label: str | None = None,
+) -> HTMLResponse:
     return _admin_template_response(
         request,
         name="admin_people.html",
@@ -1170,9 +1266,15 @@ async def admin_people(request: Request, limit: int = 50, manual_tag: str | None
             request,
             page_title="Люди",
             current_page="people",
-            people=await get_people_data(request.app, limit=limit, manual_tag=manual_tag),
+            people=await get_people_data(
+                request.app,
+                limit=limit,
+                manual_tag=manual_tag,
+                relationship_label=relationship_label,
+            ),
             limit=limit,
             active_manual_tag=_normalize_optional_text(manual_tag),
+            active_relationship_label=_normalize_optional_text(relationship_label),
         ),
     )
 
@@ -1229,6 +1331,24 @@ async def admin_person_annotations(
         notes=_normalize_optional_text(form_data.notes),
     )
     return _redirect_with_flash(form_data.redirect_to, "person_annotations_saved")
+
+
+@router.post("/admin/people/{person_id}/relationship", include_in_schema=False)
+async def admin_person_relationship_annotation(
+    request: Request,
+    person_id: str,
+    form_data: Annotated[RelationshipAnnotationForm, Form()],
+) -> RedirectResponse:
+    owner_person_id = await get_owner_person_id(request.app)
+    if person_id == owner_person_id:
+        return _redirect_with_flash("/admin/me", "owner_profile_readonly")
+    await update_person_relationship_annotation(
+        request.app,
+        person_id,
+        labels=_parse_manual_tags(form_data.relationship_labels),
+        note=_normalize_optional_text(form_data.relationship_note),
+    )
+    return _redirect_with_flash(form_data.redirect_to, "relationship_annotation_saved")
 
 
 @router.get("/admin/chats", response_class=HTMLResponse, include_in_schema=False)

@@ -113,6 +113,36 @@ CREATE INDEX idx_owner_profile_context_tags_gin ON owner_profile USING GIN(conte
 - задавать стабильный language/context layer для LLM;
 - давать управляемый owner context для сегментации людей, чатов и задач.
 
+### `relationship_annotation`
+Канонический owner-context относительно конкретного человека или чата.
+```sql
+CREATE TABLE relationship_annotation (
+  id              UUID PRIMARY KEY DEFAULT uuidv7(),
+  owner_profile_id UUID NOT NULL REFERENCES owner_profile(id) ON DELETE CASCADE,
+  person_id       UUID REFERENCES person(id) ON DELETE CASCADE,
+  chat_id         UUID REFERENCES chat(id) ON DELETE CASCADE,
+  labels          TEXT[] NOT NULL DEFAULT '{}',
+  note            TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT ck_relationship_annotation_exactly_one_target CHECK (
+    (CASE WHEN person_id IS NOT NULL THEN 1 ELSE 0 END) +
+    (CASE WHEN chat_id IS NOT NULL THEN 1 ELSE 0 END) = 1
+  ),
+  CONSTRAINT uq_relationship_annotation_owner_person UNIQUE (owner_profile_id, person_id),
+  CONSTRAINT uq_relationship_annotation_owner_chat UNIQUE (owner_profile_id, chat_id)
+);
+CREATE INDEX idx_relationship_annotation_person_id ON relationship_annotation(person_id);
+CREATE INDEX idx_relationship_annotation_chat_id ON relationship_annotation(chat_id);
+CREATE INDEX idx_relationship_annotation_labels_gin ON relationship_annotation USING GIN(labels);
+```
+
+Назначение:
+
+- хранить именно owner→subject контекст, а не общие свойства человека;
+- поддерживать сегментацию и операторские ярлыки как canonical слой;
+- позже расшириться на chat-level annotations без смены модели.
+
 ### `chat_membership`
 Кто в каком чате.
 ```sql

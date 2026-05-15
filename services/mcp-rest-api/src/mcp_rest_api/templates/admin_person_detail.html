@@ -34,10 +34,16 @@
       Контекстные теги: {{ detail.owner_profile.context_tags_preview|csvish }}
       {% if detail.owner_profile.context_tags_hidden_count %}+ ещё {{ detail.owner_profile.context_tags_hidden_count }}{% endif %}
       {% else %}
-      Мои теги: {{ (detail.person.manual_tags_preview or detail.person.manual_tags)|csvish }}
-      {% if detail.person.manual_tags_hidden_count %}+ ещё {{ detail.person.manual_tags_hidden_count }}{% endif %}
+      Контекст: {{ (detail.relationship_annotation.labels_preview or detail.relationship_annotation.labels)|csvish }}
+      {% if detail.relationship_annotation.labels_hidden_count %}+ ещё {{ detail.relationship_annotation.labels_hidden_count }}{% endif %}
       {% endif %}
     </span>
+    {% if not detail.owner_profile_mode %}
+    <span>
+      Теги контакта: {{ (detail.person.manual_tags_preview or detail.person.manual_tags)|csvish }}
+      {% if detail.person.manual_tags_hidden_count %}+ ещё {{ detail.person.manual_tags_hidden_count }}{% endif %}
+    </span>
+    {% endif %}
     <span>{% if detail.owner_profile_mode %}Язык: {{ detail.owner_profile.preferred_language|upper }}{% else %}Статус: {% if detail.person.blocked %}заблокирован{% else %}активен{% endif %}{% endif %}</span>
   </div>
 </section>
@@ -88,7 +94,39 @@
   {% else %}
   <article class="panel">
     <div class="panel-header">
-      <h3>Метки и комментарий</h3>
+      <h3>Контекст отношений</h3>
+    </div>
+    <form method="post" action="/admin/people/{{ detail.person.id }}/relationship" class="annotation-form">
+      <input type="hidden" name="redirect_to" value="/admin/people/{{ detail.person.id }}" />
+      <div class="field-group">
+        <label for="relationship_labels">Роли и сегменты</label>
+        <input
+          id="relationship_labels"
+          type="text"
+          name="relationship_labels"
+          value="{{ detail.relationship_annotation.labels|join(', ') }}"
+          placeholder="коллега, супруга, семья, pet-проект, клиент"
+        />
+        <p class="helper-text">Это главный слой owner-контекста: как именно этот человек соотносится с твоей жизнью и работой.</p>
+      </div>
+      <div class="field-group">
+        <label for="relationship_note">Заметка об отношениях</label>
+        <textarea
+          id="relationship_note"
+          name="relationship_note"
+          rows="5"
+          placeholder="Например: ключевой коллега по Frontier; рабочие вопросы можно приоритизировать утром; личные темы сюда не смешивать."
+        >{{ detail.relationship_annotation.note or "" }}</textarea>
+      </div>
+      <div class="action-row">
+        <button type="submit" class="button">Сохранить контекст</button>
+      </div>
+    </form>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Профиль контакта</h3>
     </div>
     <form method="post" action="/admin/people/{{ detail.person.id }}/annotations" class="annotation-form">
       <input type="hidden" name="redirect_to" value="/admin/people/{{ detail.person.id }}" />
@@ -109,7 +147,7 @@
           id="notes"
           name="notes"
           rows="6"
-          placeholder="Например: работает со мной по фронтенду, писать лучше вечером, относится к pet-проекту."
+          placeholder="Например: любит короткие сообщения, хорошо знает Qdrant, редко отвечает в выходные."
         >{{ detail.person.notes or "" }}</textarea>
       </div>
       <div class="action-row">

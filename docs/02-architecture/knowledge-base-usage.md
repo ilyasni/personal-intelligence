@@ -13,6 +13,7 @@ Qdrant и Neo4j считаются derived projections, которые можн�
 В canonical AI-модели нужно жёстко разделять:
 
 - `owner_profile` / first-party identity владельца;
+- `relationship_annotation` / first-party контекст владельца относительно конкретных людей и чатов;
 - `person` / third-party людей, с которыми владелец общается.
 
 Сообщения владельца не должны трактоваться как "ещё одна персона в списке контактов". Они должны использоваться как first-party context для интерпретации людей, чатов, задач и retrieval.
@@ -24,6 +25,7 @@ Qdrant и Neo4j считаются derived projections, которые можн�
 В Postgres хранятся:
 
 - `owner_profile`
+- `relationship_annotation`
 - `person`
 - `chat`
 - `chat_membership`
@@ -42,13 +44,18 @@ Qdrant и Neo4j считаются derived projections, которые можн�
 - deterministic read path;
 - ground truth для reprocess / rollback / reindex.
 
-Дополнительно в canonical person-layer должны жить operator-defined annotations:
+В canonical first-party relationship layer должны жить operator-defined annotations:
+
+- relationship labels вроде `коллега`, `супруга`, `семья`, `pet-проект`;
+- owner notes about the relationship and segmentation intent.
+
+Дополнительно в canonical person-layer могут жить более нейтральные contact-level annotations:
 
 - manual tags / labels владельца;
 - owner comments / notes;
 - future segmentation hints, введённые человеком, а не моделью.
 
-Это нужно, чтобы бизнес- и личные сегменты не зависели только от AI-интерпретации.
+Это нужно, чтобы бизнес- и личные сегменты не зависели только от AI-интерпретации и не перегружали саму карточку контакта ролью owner-context.
 
 Но эти поля относятся к внешним людям. Для самого владельца уже используется отдельный first-party profile layer `owner_profile`, а не self-contact в `person`.
 

@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -140,6 +141,48 @@ class OwnerProfile(Base):
         CheckConstraint("preferred_language IN ('ru','en')", name="ck_owner_profile_language"),
         Index("idx_owner_profile_username", "username"),
         Index("idx_owner_profile_context_tags_gin", "context_tags", postgresql_using="gin"),
+    )
+
+
+class RelationshipAnnotation(Base):
+    """Контекст владельца относительно конкретного человека или чата."""
+
+    __tablename__ = "relationship_annotation"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid4)
+    owner_profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("owner_profile.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    person_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("person.id", ondelete="CASCADE"),
+    )
+    chat_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat.id", ondelete="CASCADE"),
+    )
+    labels: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(TZ, nullable=False, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(TZ, nullable=False, default=_now, onupdate=_now)
+
+    owner_profile: Mapped["OwnerProfile"] = relationship()
+    person: Mapped["Person | None"] = relationship()
+    chat: Mapped["Chat | None"] = relationship()
+
+    __table_args__ = (
+        CheckConstraint(
+            "(CASE WHEN person_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN chat_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_relationship_annotation_exactly_one_target",
+        ),
+        UniqueConstraint("owner_profile_id", "person_id", name="uq_relationship_annotation_owner_person"),
+        UniqueConstraint("owner_profile_id", "chat_id", name="uq_relationship_annotation_owner_chat"),
+        Index("idx_relationship_annotation_person_id", "person_id"),
+        Index("idx_relationship_annotation_chat_id", "chat_id"),
+        Index("idx_relationship_annotation_labels_gin", "labels", postgresql_using="gin"),
     )
 
 

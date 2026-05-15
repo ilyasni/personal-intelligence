@@ -112,6 +112,7 @@ flowchart TD
 - **Canonical-first storage.** Postgres — truth, остальное — projections.
 - **First-party owner context.** Сообщения и устойчивые настройки владельца влияют на анализ людей, чатов и задач как отдельный context layer.
 - **Canonical owner profile.** First-party identity уже хранится в `owner_profile`, а не только в transitional `person.is_owner`.
+- **Canonical relationship context.** Owner→person и owner→chat сегментация хранится в `relationship_annotation`, а не только в free-form tags контактов.
 - **Grounded retrieval.** API сначала ищет факты, потом синтезирует ответ.
 - **Policy-driven LLM usage.** Provider routing и embeddings profile — отдельный управляемый слой.
 

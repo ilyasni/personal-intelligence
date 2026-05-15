@@ -16,6 +16,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
         "person_block_updates": [],
         "person_annotation_updates": [],
         "owner_profile_updates": [],
+        "relationship_annotation_updates": [],
     }
 
     async def fake_overview(_app: Any, days: int = 14) -> dict[str, Any]:
@@ -59,7 +60,13 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
             }
         ]
 
-    async def fake_people(_app: Any, limit: int = 50, *, manual_tag: str | None = None) -> list[dict[str, Any]]:
+    async def fake_people(
+        _app: Any,
+        limit: int = 50,
+        *,
+        manual_tag: str | None = None,
+        relationship_label: str | None = None,
+    ) -> list[dict[str, Any]]:
         return [
             {
                 "id": "person-1",
@@ -74,6 +81,8 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
                 "last_interaction_at": "2026-05-14 08:20",
                 "blocked": False,
                 "is_owner": False,
+                "relationship_labels": ["коллега", "frontier"],
+                "relationship_note": "Ключевой коллега по рабочему контуру.",
             }
         ]
 
@@ -149,6 +158,12 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
                 "blocked": False,
                 "is_owner": False,
             },
+            "relationship_annotation": {
+                "labels": ["коллега", "frontier"],
+                "labels_preview": ["коллега", "frontier"],
+                "labels_hidden_count": 0,
+                "note": "Ключевой коллега по рабочему контуру.",
+            },
             "recent_windows": [{"id": "window-1", "summary": "Discussed rollout details.", "window_end": "2026-05-14 08:15"}],
             "tasks": [{"title": "Ship admin UI", "description": "Finish operator screens", "status": "open", "due_at": "2026-05-15 10:00"}],
             "graph_neighbors": [{"person_id": "person-2", "weight": 0.8, "last_window_id": "window-1"}],
@@ -176,6 +191,12 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
                 "notes": None,
                 "blocked": False,
                 "is_owner": True,
+            },
+            "relationship_annotation": {
+                "labels": [],
+                "labels_preview": [],
+                "labels_hidden_count": 0,
+                "note": None,
             },
             "owner_profile": {
                 "id": "owner-profile-1",
@@ -243,6 +264,15 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     ) -> None:
         state["owner_profile_updates"].append((context_tags, profile_notes, preferred_language))
 
+    async def fake_update_person_relationship_annotation(
+        _app: Any,
+        person_id: str,
+        *,
+        labels: list[str],
+        note: str | None,
+    ) -> None:
+        state["relationship_annotation_updates"].append((person_id, labels, note))
+
     monkeypatch.setattr(mcp_app, "get_analytics_overview_data", fake_overview)
     monkeypatch.setattr(mcp_app, "get_conversation_data", fake_conversations)
     monkeypatch.setattr(mcp_app, "get_open_tasks_data", fake_tasks)
@@ -258,6 +288,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(mcp_app, "set_person_blocked", fake_set_person_blocked)
     monkeypatch.setattr(mcp_app, "update_person_annotations", fake_update_person_annotations)
     monkeypatch.setattr(mcp_app, "update_owner_profile", fake_update_owner_profile)
+    monkeypatch.setattr(mcp_app, "update_person_relationship_annotation", fake_update_person_relationship_annotation)
     return mcp_app.create_app(use_lifespan=False), state
 
 
@@ -306,10 +337,12 @@ def test_admin_people_links_context(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 200
     assert "ilyasni" in response.text
     assert "коллега" in response.text
+    assert "frontier" in response.text
     assert "/persons/person-1/context" in response.text
     assert "Блокировать" in response.text
     assert "раздел" in response.text
     assert "/admin/me" in response.text
+    assert "Контекст" in response.text
 
 
 def test_admin_me_renders_owner_profile(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -360,6 +393,12 @@ def test_owner_person_route_redirects_to_admin_me(monkeypatch: pytest.MonkeyPatc
                 "blocked": False,
                 "is_owner": True,
             },
+            "relationship_annotation": {
+                "labels": [],
+                "labels_preview": [],
+                "labels_hidden_count": 0,
+                "note": None,
+            },
             "recent_windows": [],
             "tasks": [],
             "graph_neighbors": [],
@@ -390,6 +429,12 @@ def test_person_detail_shows_degraded_notices(monkeypatch: pytest.MonkeyPatch) -
                 "manual_tags": ["коллега"],
                 "notes": None,
                 "blocked": False,
+            },
+            "relationship_annotation": {
+                "labels": ["коллега"],
+                "labels_preview": ["коллега"],
+                "labels_hidden_count": 0,
+                "note": None,
             },
             "recent_windows": [],
             "tasks": [],
@@ -472,6 +517,25 @@ def test_person_annotations_post_redirects(monkeypatch: pytest.MonkeyPatch) -> N
     assert response.headers["location"] == "/admin/people/person-1?flash=person_annotations_saved"
     assert state["person_annotation_updates"] == [
         ("person-1", ["коллега", "pet-проект", "семья"], "Лучше писать вечером.")
+    ]
+
+
+def test_person_relationship_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.post(
+            "/admin/people/person-1/relationship",
+            data={
+                "relationship_labels": "Коллега, frontier, работа",
+                "relationship_note": "Основной рабочий контакт.",
+                "redirect_to": "/admin/people/person-1",
+            },
+            follow_redirects=False,
+        )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/people/person-1?flash=relationship_annotation_saved"
+    assert state["relationship_annotation_updates"] == [
+        ("person-1", ["коллега", "frontier", "работа"], "Основной рабочий контакт.")
     ]
 
 

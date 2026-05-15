@@ -10,19 +10,20 @@
     <form method="get" action="/admin/people" class="filter-form">
       <input
         type="text"
-        name="manual_tag"
-        value="{{ active_manual_tag or '' }}"
-        placeholder="Фильтр по тегу: коллега, семья, pet-проект"
+        name="relationship_label"
+        value="{{ active_relationship_label or '' }}"
+        placeholder="Фильтр по контексту: коллега, семья, pet-проект"
       />
       <button type="submit" class="button ghost">Фильтровать</button>
-      {% if active_manual_tag %}
+      {% if active_relationship_label or active_manual_tag %}
       <a class="button ghost" href="/admin/people">Сбросить</a>
       {% endif %}
     </form>
   </div>
-  {% if active_manual_tag %}
+  {% if active_relationship_label or active_manual_tag %}
   <div class="pill-row">
-    <span class="pill">Фильтр: {{ active_manual_tag }}</span>
+    {% if active_relationship_label %}<span class="pill">Контекст: {{ active_relationship_label }}</span>{% endif %}
+    {% if active_manual_tag %}<span class="pill muted">Тег контакта: {{ active_manual_tag }}</span>{% endif %}
   </div>
   {% endif %}
   <p class="inline-note">
@@ -36,7 +37,8 @@
           <th>Username</th>
           <th>Организации</th>
           <th>Темы</th>
-          <th>Мои теги</th>
+          <th>Контекст</th>
+          <th>Теги контакта</th>
           <th>Доверие</th>
           <th>Последний контакт</th>
           <th>Действия</th>
@@ -57,8 +59,17 @@
           <td>{{ person.topics|csvish }}</td>
           <td>
             <div class="pill-row">
+              {% for tag in person.relationship_labels %}
+              <a class="pill" href="/admin/people?relationship_label={{ tag }}">{{ tag }}</a>
+              {% else %}
+              <span class="pill muted">нет контекста</span>
+              {% endfor %}
+            </div>
+          </td>
+          <td>
+            <div class="pill-row">
               {% for tag in person.manual_tags %}
-              <a class="pill" href="/admin/people?manual_tag={{ tag }}">{{ tag }}</a>
+              <a class="pill muted" href="/admin/people?manual_tag={{ tag }}">{{ tag }}</a>
               {% else %}
               <span class="pill muted">нет тегов</span>
               {% endfor %}
@@ -81,7 +92,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="empty-cell">Профили отсутствуют.</td>
+          <td colspan="9" class="empty-cell">Профили отсутствуют.</td>
         </tr>
         {% endfor %}
       </tbody>
