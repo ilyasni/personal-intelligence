@@ -1,144 +1,158 @@
 # CI/CD
 
-Текущий статус на 2026-05-14:
+Статус на 2026-05-19:
 
-- базовый workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) уже заведен;
-- A-06 больше не `TODO`: PR/push CI теперь запускает install/syntax sanity, обязательные `ruff` и `mypy` для canonical runtime и `pytest`;
-- реальный merge gate сейчас: зелёный GitHub Actions CI + ручная smoke-проверка server runtime после деплоя.
+- базовый workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) активен для PR, `main` и `workflow_dispatch`;
+- deploy workflow [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) активен как ручной production rollout;
+- image workflow [`.github/workflows/build-images.yml`](../../.github/workflows/build-images.yml) активен для build-only на PR и build+push в GHCR на `main`;
+- реальный merge gate сейчас: зелёный GitHub Actions CI + ручной server smoke после runtime-деплоя.
 
-Ниже описано текущее состояние и ближайшее целевое развитие CI/CD.
-
-GitHub Actions для CI. Self-hosted runner на server runtime или выделенном dev-host для тяжёлых integration-тестов (опц.).
+Ниже описан текущий рабочий контур, а не целевое когда-нибудь потом.
 
 ## Workflows
 
-### `.github/workflows/ci.yml` (уже активно для PR и push в `main`)
+### `.github/workflows/ci.yml`
+
+Назначение:
 
 1. checkout
-2. setup-python with built-in pip cache (`actions/setup-python`)
-3. install/syntax sanity job на Python 3.12 (`pip check` + `compileall`)
-4. обязательный `ruff`-job по canonical runtime через `make lint-runtime`
-5. обязательный `mypy`-job по canonical runtime через `make typecheck-runtime`
-6. test matrix на Python 3.12 и 3.13
-7. upload `pytest` JUnit artifacts
+2. `actions/setup-python` с built-in pip cache
+3. install / syntax sanity на Python 3.12
+4. обязательный `ruff` gate по canonical runtime
+5. обязательный `mypy` gate по canonical runtime
+6. `pytest` matrix на Python 3.12 и 3.13
+7. upload JUnit artifacts
 
-Gate: все шаги зелёные → merge разрешён.
+Best practices:
 
-Best practices, которые уже применены:
+- workflow-level `concurrency` с `cancel-in-progress`
+- отдельный быстрый preflight job перед test matrix
+- `fail-fast: false` для matrix
+- upload test artifacts даже при падении тестов
+- минимальные workflow permissions (`contents: read`)
 
-- workflow-level `concurrency` с `cancel-in-progress`;
-- pip cache через `setup-python`, а не отдельный `actions/cache`;
-- отдельный быстрый preflight job перед test matrix;
-- `fail-fast: false` для matrix, чтобы видеть все сломанные версии Python;
-- артефакты `pytest` загружаются даже при падении тестов (`if: always()`).
+### `.github/workflows/build-images.yml`
 
-### Ближайшее развитие `ci.yml`
+Назначение:
 
-Следующие итерации для этого же workflow:
+1. build-only на `pull_request`
+2. build + push в `ghcr.io` на `push` в `main`
+3. ручной запуск через `workflow_dispatch` с `push_images=true|false`
 
-1. integration split c testcontainers
-2. расширить `mypy` gate с canonical runtime на transitional/runtime-adjacent пакеты после погашения оставшегося static-analysis debt
-3. coverage upload
-4. `pip-audit`
-5. schema/contract drift checks
-6. docs build/lint
+Покрываемые образы:
 
-### `.github/workflows/build-images.yml` (на merge в main)
+- `pil-xray`
+- `pil-telegram-ingestor`
+- `pil-ai-orchestrator`
+- `pil-memory-projector`
+- `pil-embedding-indexer`
+- `pil-maintenance`
+- `pil-migration-runner`
+- `pil-mcp-rest-api`
 
-Пока ещё не реализован.
+Best practices:
 
-1. `docker buildx bake --push` для всех сервисов
-2. push в целевой registry (`ghcr.io` или другой выбранный registry)
-3. tag: `git sha`, `latest`, `vX.Y.Z` если на тэге
+- `actions/checkout` + Path context вместо Git context, потому что у нас монорепо и build должен видеть локальные файлы checkout-а;
+- `docker/setup-buildx-action` как recommended baseline для cache/export features;
+- `docker/login-action` в GHCR через `GITHUB_TOKEN`, без отдельных registry secrets;
+- `docker/metadata-action` для tag/label generation;
+- `cache-from/cache-to: type=gha` с отдельным `scope` на сервис;
+- workflow-level `concurrency` с `cancel-in-progress`.
 
-### `.github/workflows/deploy.yml` (вручную, через GitHub Actions environment `production`)
+Теги:
 
-Уже реализован как manual deploy workflow.
+- branch / PR refs
+- `sha-...`
+- `latest` для default branch через `flavor=latest=auto`
+
+### `.github/workflows/deploy.yml`
+
+Назначение:
 
 1. запуск только через `workflow_dispatch`
 2. обязательное подтверждение `confirm_production=true`
-3. serial rollout через workflow-level `concurrency` без `cancel-in-progress`
-4. SSH на текущий server runtime
+3. serial rollout через workflow-level `concurrency`
+4. SSH на production runtime
 5. запуск `scripts/deploy/remote-deploy.sh <ref>`
-6. `git fetch` + `git checkout` + `git pull --ff-only`
-7. `docker compose build` для canonical runtime и `migration-runner`
-8. `docker compose up -d --wait` для data-layer
-9. `migration-runner upgrade head`
-10. `docker compose up -d --wait` для app-layer
-11. финальный smoke-check по `mcp-rest-api /healthz`
 
-Best practices, которые уже применены:
+Production path:
 
-- manual production deploy не запускается автоматически на каждый merge;
-- защищённый `environment` для production secrets/vars;
-- подтверждение деплоя отдельным boolean input;
-- serial execution через `concurrency`, чтобы не пересекались два деплоя;
-- миграции выполняются из отдельного containerized `migration-runner`, а не из случайного app-container.
+1. `git fetch`
+2. `git checkout`
+3. `git pull --ff-only`
+4. `docker compose build` для canonical runtime и `migration-runner`
+5. `docker compose up -d --wait` для data-layer
+6. `migration-runner upgrade head`
+7. `docker compose up -d --wait` для app-layer
+8. финальный smoke-check по `mcp-rest-api /healthz`
+
+Best practices:
+
+- deploy не запускается автоматически на каждый merge
+- production secrets/vars живут в GitHub Environment
+- deploy подтверждается отдельным boolean input
+- миграции идут через отдельный containerized `migration-runner`
 
 ### `.github/workflows/nightly.yml`
 
 Пока ещё не реализован.
 
-1. e2e long-suite
-2. load test (50 msg/sec sustained 10 min)
-3. backup restore-drill
-4. dependency updates check
-5. отчёт в `docs/09-roadmap/milestones.md` секцию «Nightly results»
+План:
+
+1. long e2e suite
+2. dependency audit
+3. restore drill
+4. contract/schema drift checks
+5. nightly report
 
 ## Локальные хуки
 
-`.pre-commit-config.yaml`:
+`.pre-commit-config.yaml` должен закрывать:
 
-- ruff (check + format)
-- mypy (только staged)
-- biome / eslint (UI staged)
-- gitleaks
-- check-yaml, check-json, end-of-file-fixer, trailing-whitespace
-- check-merge-conflict
-- forbid-large-files
+- `ruff check`
+- `ruff format`
+- `mypy` на staged/runtime-critical code
+- `gitleaks`
+- `check-yaml`
+- `check-json`
+- `end-of-file-fixer`
+- `trailing-whitespace`
+- `check-merge-conflict`
 
-Установка: `pre-commit install` сразу после клона полного checkout.
+Установка:
 
-## Версионирование релизов
-
-- Semver: `vMAJOR.MINOR.PATCH`.
-- Тэг — на merged PR с label `release`.
-- Changelog генерится из conventional commits через `git-cliff`.
+```bash
+pre-commit install
+```
 
 ## Артефакты
 
-- Docker images — `ghcr.io/<org>/pil-<service>:<sha>`.
-- OpenAPI — отдельный артефакт `openapi-vX.Y.Z.yaml` в release-assets.
-- Контракты — `contracts-vX.Y.Z.zip`.
+- Docker images: `ghcr.io/<org>/pil-<service>:<tag>`
+- OpenAPI: отдельный release artifact, когда появится formal release flow
+- contracts bundle: отдельный artifact, когда contracts станут release-managed
 
-## Бранч-стратегия
+## Версионирование
 
-- Транк-based: `main` всегда стабилен.
-- Hot-fix: `fix/...` → быстро в `main`.
-- Release ветки не используем (один продакшен — домашний Proxmox).
+- SemVer: `vMAJOR.MINOR.PATCH`
+- changelog: из conventional commits / release notes
+- пока фактический runtime-tagging ведётся через `runtime-vX.Y.Z` в roadmap/releases
 
-## Code Owners
+## Branch strategy
 
-- `CODEOWNERS` файл (когда репо станет публичным или мульти-юзерским). В однопользовательском режиме — `* @owner`.
-- Любые `libs/contracts/**` и `migrations/**` — требуют двойной review (agent + человек).
+- trunk-based development
+- `main` должен оставаться стабильным
+- hotfix-ветки допустимы, но без отдельной долгоживущей release branch модели
 
-## Cache & speed
+## CI metrics
 
-- buildx caches на ghcr.io / локально.
-- poetry cache reused.
-- npm pnpm-store reused.
-- Integration runs с заранее прогретыми testcontainer-volumes (опц., через `--reuse`).
+- целевой P50 pipeline time: не больше 7 минут для обычного PR
+- flaky tests: всё, что стабильно требует retry, должно либо чиниться, либо уходить в quarantine
+- build-image pipeline не должен быть merge blocker для docs-only правок, поэтому он ограничен `paths`
 
-## Метрики CI
+## Next steps
 
-- Длительность пайплайна — цель P50 ≤ 7 мин.
-- Flaky tests — > 1% retry rate отслеживается, тест переходит в quarantine.
-
-## Деплой через PR
-
-Каждый merge в `main` автоматически:
-1. Билдит docker images с тэгом sha.
-2. Открывает PR в репозиторий `pil-ops` (если выделим) с обновлёнными image tags + helm values.
-3. Owner мерджит — деплой триггерится.
-
-Для MVP-1 — упрощённый flow: обновить runtime-дерево, выполнить `docker compose ... up -d`, затем ручной smoke-check.
+1. расширить `mypy` gate с canonical runtime на оставшиеся runtime-adjacent пакеты
+2. добавить coverage upload
+3. добавить `pip-audit`
+4. formalize release assets и release notes
+5. добавить nightly workflow

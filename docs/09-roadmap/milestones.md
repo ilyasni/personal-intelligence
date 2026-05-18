@@ -40,8 +40,10 @@
 | E-07 | Canonical `relationship_annotation` | E | DONE | codex | runtime-v1.1.6 | additive Postgres table + backfill from legacy person annotations, separate owner→person context in admin UI, people filtering now driven by relationship labels |
 | E-08 | Chat-level `relationship_annotation` | E | DONE | codex | runtime-v1.1.7 | owner-context now applies to chats/channels too, with chat list filters and editable chat detail annotations in admin UI |
 | P-01 | Privacy / erase cascade baseline | P | DONE | codex | runtime-v1.1.8 | admin + API person erase path with Postgres canonical delete, Qdrant/Neo4j cleanup, best-effort S3 artifact removal, audit entry, and in-process job status endpoint |
+| R-01 | Grounded synthesis in API | R | DONE | codex | runtime-v1.1.9 | person brief endpoint in `mcp-rest-api` now builds Russian-first evidence-backed synthesis over grounded context, with Wormsoft primary and heuristic fallback |
 | F-01 | Cutover verification | F | DONE | codex | runtime-v1.0.1 | canonical compose live on server, smoke strict green, cutover audit green, orphan groups absent |
 | F-02 | Deploy automation | F | DONE | codex | runtime-v1.0.5 | manual GitHub Actions deploy + remote rollout script + containerized migration-runner |
+| F-03 | Build images automation | F | DONE | codex | runtime-v1.2.0 | GitHub Actions build-images workflow now builds canonical runtime images on PR and pushes GHCR images on `main` / manual dispatch |
 
 ## Sprint history
 
@@ -73,6 +75,8 @@
 | sprint-23 | 2026-05-15 | E-07 | canonical relationship annotations landed | owner-context is now separated from contact metadata and can evolve toward chat-level segmentation |
 | sprint-24 | 2026-05-19 | E-08 | chat-level relationship annotations landed | extending first-party context from people to chats required no schema change, only read/write-path and admin UX expansion |
 | sprint-25 | 2026-05-19 | P-01 | privacy erase baseline landed | current runtime now has a real person-erase path, but durable job persistence and raw ingress object tagging still remain next-step hardening work |
+| sprint-26 | 2026-05-19 | R-01 | grounded synthesis landed in API | synthesis is now explicit and retrieval-first, not silently mixed into every admin read-path |
+| sprint-27 | 2026-05-19 | F-03 | image build automation landed | GHCR publishing is now codified in GitHub Actions, so release artifacts no longer depend on ad-hoc local docker builds |
 
 ## Releases
 
@@ -106,12 +110,12 @@
 | v1.1.6 | 2026-05-15 | canonical `relationship_annotation` table + owner→person context editing and filtering | runtime-v1.1.6 |
 | v1.1.7 | 2026-05-19 | chat-level owner-context editing, filtering, and chat detail annotations in admin UI | runtime-v1.1.7 |
 | v1.1.8 | 2026-05-19 | person erase baseline across canonical DB, graph/vector projections, admin UX, and in-process job API | runtime-v1.1.8 |
+| v1.1.9 | 2026-05-19 | grounded person brief endpoint with Wormsoft-backed synthesis and heuristic fallback | runtime-v1.1.9 |
+| v1.2.0 | 2026-05-19 | GitHub Actions build-images workflow for canonical runtime and GHCR publishing | runtime-v1.2.0 |
 
 ## Open questions
 
-- build-images workflow and fuller release automation
 - richer provider policy extraction into standalone library
-- grounded synthesis in API responses
 - profile switching / re-embedding workflows beyond initial alias bootstrap
 - durable erase jobs beyond in-process runtime memory, plus raw ingress object tagging for full object-store cascade
 - stricter controlled vocabulary or relationship labels on top of free-form manual tags

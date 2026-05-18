@@ -13,6 +13,15 @@ from openai import AsyncOpenAI
 Sentiment = Literal["positive", "negative", "neutral", "mixed"]
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
+_CODE_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE | re.MULTILINE)
+_SUMMARY_FIELD_RE = re.compile(
+    r'"summary"\s*:\s*"(?P<value>.*?)(?:"\s*,\s*"(?:topics|tasks|sentiment)"|"\s*\}|$)',
+    re.DOTALL,
+)
+_LIST_FIELD_TEMPLATES: dict[str, re.Pattern[str]] = {
+    field: re.compile(rf'"{field}"\s*:\s*\[(?P<items>.*?)\]', re.DOTALL)
+    for field in ("topics", "tasks")
+}
 _VALID_SENTIMENTS: set[str] = {"positive", "negative", "neutral", "mixed"}
 
 
@@ -82,6 +91,39 @@ def _truncate(text: str, limit: int) -> str:
     return f"{compact[: limit - 3].rstrip()}..."
 
 
+def _strip_code_fences(text: str) -> str:
+    return _CODE_FENCE_RE.sub("", text).strip()
+
+
+def _parse_list_items(raw_items: str) -> list[str]:
+    values: list[str] = []
+    for match in re.finditer(r'"((?:\\.|[^"])*)"', raw_items or ""):
+        try:
+            values.append(json.loads(f'"{match.group(1)}"'))
+        except json.JSONDecodeError:
+            continue
+    return values
+
+
+def _extract_partial_summary_fields(text: str) -> dict[str, Any]:
+    partial: dict[str, Any] = {}
+    summary_match = _SUMMARY_FIELD_RE.search(text)
+    if summary_match:
+        try:
+            raw_value = summary_match.group("value").strip()
+            partial["summary"] = json.loads(f'"{raw_value}"')
+        except json.JSONDecodeError:
+            partial["summary"] = summary_match.group("value").strip()
+
+    for field_name, pattern in _LIST_FIELD_TEMPLATES.items():
+        match = pattern.search(text)
+        if not match:
+            continue
+        partial[field_name] = _parse_list_items(match.group("items"))
+
+    return partial
+
+
 def parse_summary_payload(
     raw_text: str,
     *,
@@ -89,7 +131,7 @@ def parse_summary_payload(
     max_topics: int = 5,
     max_tasks: int = 5,
 ) -> SummaryPayload:
-    text = str(raw_text or "").strip()
+    text = _strip_code_fences(str(raw_text or "").strip())
     data: dict[str, Any] = {}
 
     match = _JSON_BLOCK_RE.search(text)
@@ -99,7 +141,9 @@ def parse_summary_payload(
             if isinstance(parsed, dict):
                 data = parsed
         except json.JSONDecodeError:
-            data = {}
+            data = _extract_partial_summary_fields(match.group(0))
+    elif '"summary"' in text or '"topics"' in text or '"tasks"' in text:
+        data = _extract_partial_summary_fields(text)
 
     if not data:
         return SummaryPayload(summary=_truncate(text or "No summary generated.", max_summary_chars))

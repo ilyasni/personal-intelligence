@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     s3_secret_access_key: str = ""
     s3_region: str = "ru-central-1"
 
+    wormsoft_api_base: str = "https://ai.wormsoft.ru/api/gpt"
+    wormsoft_api_key: str = ""
+    wormsoft_model_default: str = "wormsoft/agent/medium"
+    wormsoft_max_simultaneous_requests: int = 1
+    wormsoft_min_request_interval_ms: int = 250
+    wormsoft_max_retries: int = 2
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

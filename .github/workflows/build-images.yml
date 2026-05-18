@@ -1,0 +1,110 @@
+name: Build Images
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/build-images.yml"
+      - "infra/compose/docker-compose.yml"
+      - "libs/**"
+      - "services/**"
+      - "pyproject.toml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build-images.yml"
+      - "infra/compose/docker-compose.yml"
+      - "libs/**"
+      - "services/**"
+      - "pyproject.toml"
+  workflow_dispatch:
+    inputs:
+      push_images:
+        description: Push built images to GHCR
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build ${{ matrix.image.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - service: xray
+            image_name: pil-xray
+            dockerfile: services/xray/Dockerfile
+          - service: telegram-ingestor
+            image_name: pil-telegram-ingestor
+            dockerfile: services/telegram-ingestor/Dockerfile
+          - service: ai-orchestrator
+            image_name: pil-ai-orchestrator
+            dockerfile: services/ai-orchestrator/Dockerfile
+          - service: memory-projector
+            image_name: pil-memory-projector
+            dockerfile: services/memory-projector/Dockerfile
+          - service: embedding-indexer
+            image_name: pil-embedding-indexer
+            dockerfile: services/embedding-indexer/Dockerfile
+          - service: maintenance
+            image_name: pil-maintenance
+            dockerfile: services/maintenance/Dockerfile
+          - service: migration-runner
+            image_name: pil-migration-runner
+            dockerfile: services/migration-runner/Dockerfile
+          - service: mcp-rest-api
+            image_name: pil-mcp-rest-api
+            dockerfile: services/mcp-rest-api/Dockerfile
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push_images) }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image.image_name }}
+          flavor: |
+            latest=auto
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+
+      - name: Build and optionally push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push_images) }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.service }}

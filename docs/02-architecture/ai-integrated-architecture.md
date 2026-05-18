@@ -280,6 +280,17 @@ PIL должен использовать routing не "по сервису", а
 
 LLM в API-слое не должен сам ходить "в глубину" без плана. Сначала deterministic retrieval, потом synthesis.
 
+### Текущее состояние grounded synthesis
+
+В runtime baseline `mcp-rest-api` уже умеет отдельный person-brief endpoint поверх grounded context:
+
+- retrieval идёт из Postgres first;
+- evidence собирается из последних `analysis_window.source_message_ids`;
+- краткий brief строится через Wormsoft, если провайдер доступен;
+- при недоступности провайдера включается русский heuristic fallback с явным caveat.
+
+Это intentional design: synthesis вызывается отдельным endpoint и не подмешивается автоматически в каждое открытие карточки в админке, чтобы не ухудшать latency и operator UX.
+
 ## Что взять из старых реализаций
 
 ### Из `telegram-assistant`

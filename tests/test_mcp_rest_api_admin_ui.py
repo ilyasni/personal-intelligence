@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import mcp_rest_api.app as mcp_app
@@ -307,6 +308,20 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
             "warnings": [],
         }
 
+    async def fake_synthesize_person_brief(_app: Any, person_id: str) -> dict[str, Any]:
+        return {
+            "person_id": person_id,
+            "display_name": "Ilyas",
+            "provider": "wormsoft",
+            "summary": "Короткий evidence-backed brief на русском.",
+            "topics": ["ops", "memory"],
+            "task_titles": ["Ship admin UI"],
+            "confidence": 0.74,
+            "evidence_window_ids": ["window-1"],
+            "evidence_message_ids": [101],
+            "caveats": [],
+        }
+
     monkeypatch.setattr(mcp_app, "get_analytics_overview_data", fake_overview)
     monkeypatch.setattr(mcp_app, "get_conversation_data", fake_conversations)
     monkeypatch.setattr(mcp_app, "get_open_tasks_data", fake_tasks)
@@ -325,6 +340,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(mcp_app, "update_person_relationship_annotation", fake_update_person_relationship_annotation)
     monkeypatch.setattr(mcp_app, "update_chat_relationship_annotation", fake_update_chat_relationship_annotation)
     monkeypatch.setattr(mcp_app, "erase_person_cascade", fake_erase_person_cascade)
+    monkeypatch.setattr(mcp_app, "synthesize_person_brief", fake_synthesize_person_brief)
     app = mcp_app.create_app(use_lifespan=False)
     app.state.jobs = {}
     return app, state
@@ -640,6 +656,17 @@ def test_person_erase_api_queues_job(monkeypatch: pytest.MonkeyPatch) -> None:
     assert state["person_erase_updates"] == [("person-1", "system")]
 
 
+def test_person_brief_endpoint_returns_grounded_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.get("/persons/person-1/brief")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider"] == "wormsoft"
+    assert payload["summary"] == "Короткий evidence-backed brief на русском."
+    assert payload["evidence_message_ids"] == [101]
+
+
 def test_owner_annotations_post_redirects_to_admin_me(monkeypatch: pytest.MonkeyPatch) -> None:
     app, state = _build_app(monkeypatch)
     with TestClient(app) as client:
@@ -686,3 +713,56 @@ def test_await_with_timeout_uses_fallback_on_timeout() -> None:
 
     assert result == []
     assert status == "semantic_memory_timeout"
+
+
+def test_synthesize_person_brief_falls_back_when_llm_payload_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _BrokenLLM:
+        is_available = True
+
+        async def complete_summary(self, **_: Any) -> Any:
+            return mcp_app.SummaryPayload(
+                summary="No summary generated.",
+                topics=[],
+                tasks=[],
+                sentiment="neutral",
+            )
+
+    async def fake_person_detail(_app: Any, person_id: str) -> dict[str, Any]:
+        return {
+            "person": {
+                "id": person_id,
+                "display_name": "Maria",
+                "username": "maria",
+                "is_owner": False,
+                "topics": ["семья", "дом"],
+                "organizations": [],
+            },
+            "relationship_annotation": {"labels": ["семья"], "note": "Близкий контакт"},
+            "recent_windows": [
+                {
+                    "id": "window-1",
+                    "window_end": "2026-05-14 08:15",
+                    "summary": "Обсуждали дорогу домой и самочувствие.",
+                    "source_message_ids": [101, 102],
+                },
+                {
+                    "id": "window-2",
+                    "window_end": "2026-05-15 09:00",
+                    "summary": "Писали про бытовые задачи.",
+                    "source_message_ids": [103],
+                },
+            ],
+            "tasks": [{"title": "Купить продукты"}],
+        }
+
+    monkeypatch.setattr(mcp_app, "get_person_detail_data", fake_person_detail)
+    app = SimpleNamespace(state=SimpleNamespace(grounded_llm=_BrokenLLM()))
+
+    payload = mcp_app.asyncio.run(mcp_app.synthesize_person_brief(app, "person-1"))
+
+    assert payload["provider"] == "heuristic"
+    assert payload["summary"] != "No summary generated."
+    assert "llm payload invalid" in payload["caveats"]
+    assert payload["task_titles"] == ["Купить продукты"]

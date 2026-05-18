@@ -21,6 +21,7 @@ from qdrant_client import AsyncQdrantClient, models
 
 from mcp_rest_api.settings import settings
 from pil_contracts import STREAM_AI_REPROCESS_WINDOW, ReprocessWindowCommand
+from pil_llm import OpenAICompatChatClient, SummaryPayload, WormsoftConfig, build_wormsoft_client
 from pil_storage import RedisClient, S3Client
 
 if TYPE_CHECKING:
@@ -239,6 +240,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         bucket_raw=settings.s3_bucket_raw,
         bucket_media=settings.s3_bucket_media,
     )
+    grounded_llm = build_wormsoft_client(
+        WormsoftConfig(
+            api_base=settings.wormsoft_api_base,
+            api_key=settings.wormsoft_api_key,
+            model=settings.wormsoft_model_default,
+            max_parallel_requests=settings.wormsoft_max_simultaneous_requests,
+            min_request_interval_ms=settings.wormsoft_min_request_interval_ms,
+            max_retries=settings.wormsoft_max_retries,
+        ),
+        service_name="mcp-rest-api-wormsoft",
+    )
     neo4j_driver = None
     if settings.neo4j_password:
         neo4j_driver = AsyncGraphDatabase.driver(
@@ -251,11 +263,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.redis = redis
     app.state.qdrant = qdrant
     app.state.s3 = s3
+    app.state.grounded_llm = grounded_llm
     app.state.neo4j_driver = neo4j_driver
     app.state.jobs = {}
     yield
     if neo4j_driver is not None:
         await neo4j_driver.close()
+    await grounded_llm.close()
     await qdrant.close()
     await redis.aclose()
     await db_pool.close()
@@ -618,6 +632,134 @@ async def _run_person_erase_job(app: FastAPI, job_id: str, person_id: str) -> No
         "person_id": person_id,
         "status": "done",
         "result": result,
+    }
+
+
+def _person_brief_heuristic(detail: dict[str, Any]) -> SummaryPayload:
+    person = detail["person"]
+    relationship = detail.get("relationship_annotation", {})
+    task_titles = [str(task.get("title") or "").strip() for task in detail.get("tasks", []) if task.get("title")]
+    recent_windows = [window for window in detail.get("recent_windows", []) if window.get("summary")]
+    labels = _normalize_string_list(relationship.get("labels"))
+    parts = [f"{person.get('display_name') or 'Контакт'} — внешний контакт владельца."]
+    if labels:
+        parts.append(f"Основной контекст: {', '.join(labels)}.")
+    if recent_windows:
+        parts.append(
+            f"В последних окнах чаще всего всплывают темы: {recent_windows[0].get('summary')}."  # noqa: RUF001
+        )
+    if task_titles:
+        parts.append(f"С ним сейчас связаны задачи: {', '.join(task_titles[:3])}.")  # noqa: RUF001
+    if not recent_windows and not task_titles:
+        parts.append("Недостаточно данных для доказательного краткого профиля.")
+    return SummaryPayload(
+        summary=" ".join(parts),
+        tasks=task_titles[:5],
+        topics=_normalize_string_list(person.get("topics"))[:5],
+    )
+
+
+def _brief_confidence(detail: dict[str, Any], *, provider: str, evidence_count: int) -> float:
+    score = 0.38
+    if detail.get("relationship_annotation", {}).get("labels"):
+        score += 0.08
+    if detail.get("tasks"):
+        score += 0.08
+    score += min(len(detail.get("recent_windows", [])), 3) * 0.08
+    score += min(evidence_count, 6) * 0.02
+    if provider == "wormsoft":
+        score += 0.08
+    return round(min(score, 0.86), 3)
+
+
+async def synthesize_person_brief(app: FastAPI, person_id: str) -> dict[str, Any]:
+    detail = await get_person_detail_data(app, person_id)
+    if detail["person"].get("is_owner"):
+        raise HTTPException(status_code=400, detail="owner_profile_brief_not_supported")
+
+    person = detail["person"]
+    relationship = detail.get("relationship_annotation", {})
+    recent_windows = detail.get("recent_windows", [])
+    task_titles = [str(task.get("title") or "").strip() for task in detail.get("tasks", []) if task.get("title")]
+    evidence_window_ids = [str(window.get("id")) for window in recent_windows[:3] if window.get("id")]
+    evidence_message_ids: list[int] = []
+    for window in recent_windows[:3]:
+        for message_id in window.get("source_message_ids") or []:
+            if isinstance(message_id, int) and message_id not in evidence_message_ids:
+                evidence_message_ids.append(message_id)
+
+    llm_client: OpenAICompatChatClient = app.state.grounded_llm
+    provider = "heuristic"
+    caveats: list[str] = []
+    if len(recent_windows) <= 1:
+        caveats.append("single-window evidence")
+    if not evidence_message_ids:
+        caveats.append("insufficient context")
+
+    heuristic_payload = _person_brief_heuristic(detail)
+    payload = heuristic_payload
+    if llm_client.is_available:
+        provider = "wormsoft"
+        system_prompt = (
+            "Ты готовишь очень короткий evidence-backed brief по человеку для личной memory-system. "
+            "Пиши только по-русски. Не выдумывай факты, не делай психодиагностику, не делай клинических выводов. "  # noqa: RUF001
+            "Опирайся только на переданный контекст. Верни JSON с полями summary, topics, tasks, sentiment."  # noqa: RUF001
+        )
+        user_prompt = "\n".join(
+            [
+                f"Имя: {person.get('display_name') or '—'}",
+                f"Username: @{person.get('username') or 'не указан'}",
+                f"Контекст отношений: {', '.join(_normalize_string_list(relationship.get('labels'))) or 'не указан'}",
+                f"Заметка об отношениях: {relationship.get('note') or '—'}",  # noqa: RUF001
+                f"Темы: {', '.join(_normalize_string_list(person.get('topics'))) or '—'}",
+                f"Организации: {', '.join(_normalize_string_list(person.get('organizations'))) or '—'}",
+                f"Задачи: {', '.join(task_titles[:5]) or '—'}",
+                "Последние окна:",
+                *[
+                    f"- {window.get('window_end')}: {window.get('summary')}"
+                    for window in recent_windows[:3]
+                ],
+                "Сделай 2-4 предложения. Если данных мало, прямо скажи об этом.",  # noqa: RUF001
+            ]
+        )
+        try:
+            payload = await llm_client.complete_summary(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                model_override=settings.wormsoft_model_default,
+                max_tokens=280,
+                max_summary_chars=420,
+                max_tasks=5,
+            )
+            summary_text = str(payload.summary or "").strip()
+            if (
+                not summary_text
+                or summary_text == "No summary generated."
+                or summary_text.startswith("{")
+                or summary_text.startswith("```")
+            ):
+                payload = heuristic_payload
+                provider = "heuristic"
+                caveats.append("llm payload invalid")
+        except Exception:
+            provider = "heuristic"
+            caveats.append("heuristic fallback")
+
+    if provider == "heuristic" and "heuristic fallback" not in caveats:
+        caveats.append("heuristic fallback")
+
+    confidence = _brief_confidence(detail, provider=provider, evidence_count=len(evidence_message_ids))
+    return {
+        "person_id": person_id,
+        "display_name": person.get("display_name"),
+        "provider": provider,
+        "summary": payload.summary,
+        "topics": payload.topics,
+        "task_titles": payload.tasks or task_titles[:5],
+        "confidence": confidence,
+        "evidence_window_ids": evidence_window_ids,
+        "evidence_message_ids": evidence_message_ids[:8],
+        "caveats": caveats,
     }
 
 
@@ -1370,6 +1512,7 @@ async def get_person_context_data(app: FastAPI, person_id: str) -> dict[str, Any
             windows = await conn.fetch(
                 """
                 SELECT aw.id, aw.summary, aw.window_end, aw.analysis_payload
+                     , aw.source_message_ids
                 FROM analysis_window aw
                 WHERE EXISTS (
                     SELECT 1
@@ -1496,6 +1639,12 @@ async def analytics_conversations(request: Request, limit: int = 20) -> dict[str
 @router.get("/persons/{person_id}/context")
 async def person_context(request: Request, person_id: str) -> dict[str, Any]:
     return await get_person_context_data(request.app, person_id)
+
+
+@router.get("/persons/{person_id}/brief")
+@router.get("/v1/persons/{person_id}/brief", include_in_schema=False)
+async def person_brief(request: Request, person_id: str) -> dict[str, Any]:
+    return await synthesize_person_brief(request.app, person_id)
 
 
 @router.api_route("/persons/{person_id}/erase", methods=["POST", "DELETE"])

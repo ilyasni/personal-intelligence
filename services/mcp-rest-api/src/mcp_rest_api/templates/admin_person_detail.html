@@ -11,6 +11,9 @@
     <div class="action-row">
       <a class="button ghost" href="/persons/{{ detail.person.id }}/context">Открыть JSON-контекст</a>
       {% if not detail.owner_profile_mode %}
+      <a class="button ghost" href="/persons/{{ detail.person.id }}/brief">AI brief</a>
+      {% endif %}
+      {% if not detail.owner_profile_mode %}
       <form method="post" action="/admin/people/{{ detail.person.id }}/block" class="inline-form">
         <input type="hidden" name="redirect_to" value="/admin/people/{{ detail.person.id }}" />
         <button type="submit" class="button {% if detail.person.blocked %}success{% else %}warn{% endif %}">

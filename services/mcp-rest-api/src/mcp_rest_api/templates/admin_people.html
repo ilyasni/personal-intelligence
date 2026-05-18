@@ -81,6 +81,7 @@
             <div class="action-row">
               <a class="button ghost" href="/admin/people/{{ person.id }}">Профиль</a>
               <a class="button ghost" href="/persons/{{ person.id }}/context">JSON</a>
+              <a class="button ghost" href="/persons/{{ person.id }}/brief">Brief</a>
               <form method="post" action="/admin/people/{{ person.id }}/block" class="inline-form">
                 <input type="hidden" name="redirect_to" value="/admin/people" />
                 <button type="submit" class="button {% if person.blocked %}success{% else %}warn{% endif %}">

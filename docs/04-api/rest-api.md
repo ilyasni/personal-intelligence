@@ -31,6 +31,7 @@ REST-эндпоинты обслуживают Admin UI и внутренние 
 - `GET /v1/persons/{id}` — карточка (включая агрегаты).
 - `PATCH /v1/persons/{id}` — апдейт notes / tags / topics (вручную).
 - `GET /v1/persons/{id}/context?query=&hops=` — то же, что MCP `get_person_context`.
+- `GET /v1/persons/{id}/brief` — grounded synthesis brief с `summary`, `confidence`, `evidence_window_ids`, `evidence_message_ids`, `caveats`.
 - `GET /v1/persons/{id}/export` — zip-экспорт.
 - `DELETE /v1/persons/{id}/erase` — GDPR-каскадное удаление (async, возвращает job id).
 - Текущий runtime также поддерживает совместимый `POST /persons/{id}/erase` и `GET /jobs/{job_id}` без version-prefix, потому что server-rendered admin сейчас работает поверх unprefixed FastAPI routes.
@@ -95,3 +96,10 @@ REST-эндпоинты обслуживают Admin UI и внутренние 
 ## OpenAPI
 
 Полный контракт — [openapi.yaml](openapi.yaml). Файл генерируется из FastAPI (`python -m services.mcp_rest_api.export_openapi`) при каждом релизе.
+
+## Grounded synthesis notes
+
+- `brief` не является свободным agent endpoint.
+- Сначала собирается deterministic context из Postgres/Qdrant/Neo4j.
+- Wormsoft используется только для короткого synthesis поверх уже собранных фактов.
+- Если провайдер недоступен, runtime возвращает русский heuristic fallback с caveat `heuristic fallback`.
