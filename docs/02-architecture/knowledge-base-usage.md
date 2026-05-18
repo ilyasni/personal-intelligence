@@ -47,6 +47,7 @@ Qdrant и Neo4j считаются derived projections, которые можн�
 В canonical first-party relationship layer должны жить operator-defined annotations:
 
 - relationship labels вроде `коллега`, `супруга`, `семья`, `pet-проект`;
+- relationship labels для чатов и каналов вроде `работа`, `семья`, `внутренний контур`, `клиенты`;
 - owner notes about the relationship and segmentation intent.
 
 Дополнительно в canonical person-layer могут жить более нейтральные contact-level annotations:

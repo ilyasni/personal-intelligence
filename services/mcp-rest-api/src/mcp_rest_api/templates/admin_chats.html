@@ -3,9 +3,28 @@
 {% block content %}
 <section class="panel">
   <div class="panel-header">
-    <h3>Чаты</h3>
-    <p class="panel-copy">{{ limit }} чатов с видимостью по окнам и состоянию allowlist.</p>
+    <div>
+      <h3>Чаты</h3>
+      <p class="panel-copy">{{ limit }} последних чатов с owner-контекстом, окнами и состоянием allowlist.</p>
+    </div>
+    <form method="get" action="/admin/chats" class="filter-form">
+      <input
+        type="text"
+        name="relationship_label"
+        value="{{ active_relationship_label or '' }}"
+        placeholder="Фильтр по контексту: работа, семья, pet-проект"
+      />
+      <button type="submit" class="button ghost">Фильтровать</button>
+      {% if active_relationship_label %}
+      <a class="button ghost" href="/admin/chats">Сбросить</a>
+      {% endif %}
+    </form>
   </div>
+  {% if active_relationship_label %}
+  <div class="pill-row">
+    <span class="pill">Контекст: {{ active_relationship_label }}</span>
+  </div>
+  {% endif %}
   <div class="table-shell">
     <table>
       <thead>
@@ -13,6 +32,7 @@
           <th>Название</th>
           <th>Telegram ID</th>
           <th>Тип</th>
+          <th>Контекст</th>
           <th>Разрешён</th>
           <th>Участники</th>
           <th>Окна</th>
@@ -26,6 +46,15 @@
           <td>{{ chat.title or ("Чат " ~ chat.tg_chat_id) }}</td>
           <td>{{ chat.tg_chat_id }}</td>
           <td>{{ chat.kind|chat_kind_label }}</td>
+          <td>
+            <div class="pill-row">
+              {% for tag in chat.relationship_labels %}
+              <a class="pill" href="/admin/chats?relationship_label={{ tag }}">{{ tag }}</a>
+              {% else %}
+              <span class="pill muted">нет контекста</span>
+              {% endfor %}
+            </div>
+          </td>
           <td>{{ chat.is_allowed|bool_label }}</td>
           <td>{{ chat.member_count or 0 }}</td>
           <td>{{ chat.window_count }}</td>
@@ -44,7 +73,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="empty-cell">Чаты отсутствуют.</td>
+          <td colspan="9" class="empty-cell">Чаты отсутствуют.</td>
         </tr>
         {% endfor %}
       </tbody>

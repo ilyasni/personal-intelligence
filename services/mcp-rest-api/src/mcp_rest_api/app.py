@@ -557,6 +557,12 @@ async def get_chat_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
+            WITH current_owner AS (
+                SELECT id
+                FROM owner_profile
+                ORDER BY updated_at DESC
+                LIMIT 1
+            )
             SELECT
                 c.id,
                 c.tg_chat_id,
@@ -565,16 +571,25 @@ async def get_chat_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
                 c.is_allowed,
                 c.member_count,
                 count(aw.id)::int AS window_count,
-                max(aw.window_end) AS last_window_end
+                max(aw.window_end) AS last_window_end,
+                COALESCE(ra.labels, ARRAY[]::text[]) AS relationship_labels,
+                ra.note AS relationship_note
             FROM chat c
+            LEFT JOIN current_owner owner ON TRUE
+            LEFT JOIN relationship_annotation ra
+              ON ra.owner_profile_id = owner.id
+             AND ra.chat_id = c.id
             LEFT JOIN analysis_window aw ON aw.chat_id = c.id
-            GROUP BY c.id
+            GROUP BY c.id, ra.labels, ra.note
             ORDER BY max(aw.window_end) DESC NULLS LAST, c.updated_at DESC
             LIMIT $1
             """,
             limit,
         )
-    return [dict(row) for row in rows]
+    items = [dict(row) for row in rows]
+    for item in items:
+        item["relationship_labels"] = _normalize_string_list(item.get("relationship_labels"))
+    return items
 
 
 async def get_conversation_detail_data(app: FastAPI, window_id: str) -> dict[str, Any]:
@@ -664,6 +679,7 @@ async def get_person_detail_data(app: FastAPI, person_id: str) -> dict[str, Any]
 
 async def get_chat_detail_data(app: FastAPI, chat_id: str) -> dict[str, Any]:
     pool: asyncpg.Pool = app.state.db_pool
+    owner_profile_id = await get_current_owner_profile_id(app)
     async with pool.acquire() as conn:
         chat = await conn.fetchrow(
             """
@@ -686,6 +702,20 @@ async def get_chat_detail_data(app: FastAPI, chat_id: str) -> dict[str, Any]:
         )
         if chat is None:
             raise HTTPException(status_code=404, detail="chat_not_found")
+        relationship_annotation = await conn.fetchrow(
+            """
+            SELECT
+                labels,
+                note,
+                updated_at
+            FROM relationship_annotation
+            WHERE owner_profile_id = $1::uuid
+              AND chat_id = $2::uuid
+            LIMIT 1
+            """,
+            owner_profile_id,
+            chat_id,
+        )
         windows = await conn.fetch(
             """
             SELECT id, window_start, window_end, summary, confidence::float AS confidence
@@ -706,10 +736,18 @@ async def get_chat_detail_data(app: FastAPI, chat_id: str) -> dict[str, Any]:
             """,
             chat_id,
         )
+    relationship_payload = dict(relationship_annotation) if relationship_annotation is not None else {}
+    relationship_payload["labels"] = _normalize_string_list(relationship_payload.get("labels"))
+    relationship_payload["labels_preview"], relationship_payload["labels_hidden_count"] = _list_preview(
+        relationship_payload["labels"],
+        limit=8,
+    )
+    relationship_payload["note"] = _normalize_optional_text(cast("str | None", relationship_payload.get("note")))
     return {
         "chat": dict(chat),
         "windows": [dict(row) for row in windows],
         "tasks": [dict(row) for row in tasks],
+        "relationship_annotation": relationship_payload,
     }
 
 
@@ -909,6 +947,40 @@ async def update_person_relationship_annotation(
             """,
             owner_profile_id,
             person_id,
+            labels,
+            note,
+        )
+    if not result.startswith(("INSERT", "UPDATE")):
+        raise HTTPException(status_code=500, detail="relationship_annotation_write_failed")
+
+
+async def update_chat_relationship_annotation(
+    app: FastAPI,
+    chat_id: str,
+    *,
+    labels: list[str],
+    note: str | None,
+) -> None:
+    pool: asyncpg.Pool = app.state.db_pool
+    owner_profile_id = await get_current_owner_profile_id(app)
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            INSERT INTO relationship_annotation (
+                owner_profile_id,
+                chat_id,
+                labels,
+                note
+            )
+            VALUES ($1::uuid, $2::uuid, $3::text[], $4)
+            ON CONFLICT (owner_profile_id, chat_id)
+            DO UPDATE SET
+                labels = EXCLUDED.labels,
+                note = EXCLUDED.note,
+                updated_at = now()
+            """,
+            owner_profile_id,
+            chat_id,
             labels,
             note,
         )
@@ -1352,7 +1424,19 @@ async def admin_person_relationship_annotation(
 
 
 @router.get("/admin/chats", response_class=HTMLResponse, include_in_schema=False)
-async def admin_chats(request: Request, limit: int = 50) -> HTMLResponse:
+async def admin_chats(
+    request: Request,
+    limit: int = 50,
+    relationship_label: str | None = None,
+) -> HTMLResponse:
+    chats = await get_chat_data(request.app, limit=limit)
+    active_relationship_label = _normalize_optional_text(relationship_label)
+    if active_relationship_label is not None:
+        chats = [
+            chat
+            for chat in chats
+            if active_relationship_label in _normalize_string_list(chat.get("relationship_labels"))
+        ]
     return _admin_template_response(
         request,
         name="admin_chats.html",
@@ -1360,8 +1444,9 @@ async def admin_chats(request: Request, limit: int = 50) -> HTMLResponse:
             request,
             page_title="Чаты",
             current_page="chats",
-            chats=await get_chat_data(request.app, limit=limit),
+            chats=chats,
             limit=limit,
+            active_relationship_label=active_relationship_label,
         ),
     )
 
@@ -1393,6 +1478,21 @@ async def admin_chat_allowlist(
     await set_chat_allowlist(request.app, chat_id, is_allowed=allowed)
     flash_key = "chat_allowed" if allowed else "chat_disallowed"
     return _redirect_with_flash(redirect_to, flash_key)
+
+
+@router.post("/admin/chats/{chat_id}/relationship", include_in_schema=False)
+async def admin_chat_relationship_annotation(
+    request: Request,
+    chat_id: str,
+    form_data: Annotated[RelationshipAnnotationForm, Form()],
+) -> RedirectResponse:
+    await update_chat_relationship_annotation(
+        request.app,
+        chat_id,
+        labels=_parse_manual_tags(form_data.relationship_labels),
+        note=_normalize_optional_text(form_data.relationship_note),
+    )
+    return _redirect_with_flash(form_data.redirect_to, "relationship_annotation_saved")
 
 
 def create_app(*, use_lifespan: bool = True) -> FastAPI:

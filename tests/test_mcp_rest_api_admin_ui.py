@@ -17,6 +17,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
         "person_annotation_updates": [],
         "owner_profile_updates": [],
         "relationship_annotation_updates": [],
+        "chat_relationship_annotation_updates": [],
     }
 
     async def fake_overview(_app: Any, days: int = 14) -> dict[str, Any]:
@@ -97,6 +98,8 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
                 "member_count": 2,
                 "window_count": 5,
                 "last_window_end": "2026-05-14 08:15",
+                "relationship_labels": ["работа", "pil"],
+                "relationship_note": "Основной рабочий чат по админке и runtime.",
             }
         ]
 
@@ -233,6 +236,12 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
                 "last_window_end": "2026-05-14 08:15",
                 "metadata": {"source": "telegram"},
             },
+            "relationship_annotation": {
+                "labels": ["работа", "pil"],
+                "labels_preview": ["работа", "pil"],
+                "labels_hidden_count": 0,
+                "note": "Основной рабочий чат по админке и runtime.",
+            },
             "windows": [{"id": "window-1", "window_end": "2026-05-14 08:15", "summary": "Discussed rollout details.", "confidence": 0.92}],
             "tasks": [{"title": "Ship admin UI", "status": "open", "priority": 1, "confidence": 0.88, "due_at": "2026-05-15 10:00"}],
         }
@@ -273,6 +282,15 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     ) -> None:
         state["relationship_annotation_updates"].append((person_id, labels, note))
 
+    async def fake_update_chat_relationship_annotation(
+        _app: Any,
+        chat_id: str,
+        *,
+        labels: list[str],
+        note: str | None,
+    ) -> None:
+        state["chat_relationship_annotation_updates"].append((chat_id, labels, note))
+
     monkeypatch.setattr(mcp_app, "get_analytics_overview_data", fake_overview)
     monkeypatch.setattr(mcp_app, "get_conversation_data", fake_conversations)
     monkeypatch.setattr(mcp_app, "get_open_tasks_data", fake_tasks)
@@ -289,6 +307,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(mcp_app, "update_person_annotations", fake_update_person_annotations)
     monkeypatch.setattr(mcp_app, "update_owner_profile", fake_update_owner_profile)
     monkeypatch.setattr(mcp_app, "update_person_relationship_annotation", fake_update_person_relationship_annotation)
+    monkeypatch.setattr(mcp_app, "update_chat_relationship_annotation", fake_update_chat_relationship_annotation)
     return mcp_app.create_app(use_lifespan=False), state
 
 
@@ -486,6 +505,36 @@ def test_chat_allowlist_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 303
     assert response.headers["location"] == "/admin/chats/chat-1?flash=chat_disallowed"
     assert state["allowlist_updates"] == [("chat-1", False)]
+
+
+def test_admin_chats_renders_relationship_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.get("/admin/chats")
+    assert response.status_code == 200
+    assert "Ops chat" in response.text
+    assert "работа" in response.text
+    assert "pil" in response.text
+    assert "Контекст" in response.text
+
+
+def test_chat_relationship_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.post(
+            "/admin/chats/chat-1/relationship",
+            data={
+                "relationship_labels": "Работа, pil, внутренний контур",
+                "relationship_note": "Главный рабочий чат по сервису.",
+                "redirect_to": "/admin/chats/chat-1",
+            },
+            follow_redirects=False,
+        )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/chats/chat-1?flash=relationship_annotation_saved"
+    assert state["chat_relationship_annotation_updates"] == [
+        ("chat-1", ["работа", "pil", "внутренний контур"], "Главный рабочий чат по сервису.")
+    ]
 
 
 def test_person_block_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:

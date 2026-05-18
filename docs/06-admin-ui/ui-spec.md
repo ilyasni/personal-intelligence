@@ -102,6 +102,12 @@ Web SPA для владельца инсталляции. Один пользо�
 
 ### Chats list / Chat detail
 - Список с allowlist toggle.
+- В текущем server-rendered runtime список чатов уже поддерживает owner-context filter по `relationship labels`.
+- Detail содержит:
+  - editable `relationship labels` для чата или канала;
+  - free-form `relationship note`, описывающий как этот чат должен интерпретироваться (`работа`, `семья`, `pet-проект`, `внутренний контур`);
+  - allowlist toggle;
+  - последние окна и связанные задачи.
 - Detail — лента Interaction'ов + кнопка «Re-summarize».
 
 ### Tasks board

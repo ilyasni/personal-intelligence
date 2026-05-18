@@ -38,6 +38,7 @@
 | E-05 | Owner identity reset | E | DONE | codex | runtime-v1.1.4 | owner separated from ordinary people UX, new `/admin/me`, people list treated as external-only, docs updated toward `owner_profile` + `relationship_annotation` target model |
 | E-06 | Canonical `owner_profile` | E | DONE | codex | runtime-v1.1.5 | additive Postgres table + backfill from `person.is_owner`, `/admin/me` edits first-party context directly, transitional backing record kept only for compatibility |
 | E-07 | Canonical `relationship_annotation` | E | DONE | codex | runtime-v1.1.6 | additive Postgres table + backfill from legacy person annotations, separate owner→person context in admin UI, people filtering now driven by relationship labels |
+| E-08 | Chat-level `relationship_annotation` | E | DONE | codex | runtime-v1.1.7 | owner-context now applies to chats/channels too, with chat list filters and editable chat detail annotations in admin UI |
 | F-01 | Cutover verification | F | DONE | codex | runtime-v1.0.1 | canonical compose live on server, smoke strict green, cutover audit green, orphan groups absent |
 | F-02 | Deploy automation | F | DONE | codex | runtime-v1.0.5 | manual GitHub Actions deploy + remote rollout script + containerized migration-runner |
 
@@ -69,6 +70,7 @@
 | sprint-21 | 2026-05-15 | E-05 | owner identity reset applied to admin UX and docs | first-party owner context should not be modeled as just another external person |
 | sprint-22 | 2026-05-15 | E-06 | canonical owner profile landed in runtime and admin UI | additive migration + compatibility fallback let us evolve identity modeling without breaking existing windows/tasks |
 | sprint-23 | 2026-05-15 | E-07 | canonical relationship annotations landed | owner-context is now separated from contact metadata and can evolve toward chat-level segmentation |
+| sprint-24 | 2026-05-19 | E-08 | chat-level relationship annotations landed | extending first-party context from people to chats required no schema change, only read/write-path and admin UX expansion |
 
 ## Releases
 
@@ -100,6 +102,7 @@
 | v1.1.4 | 2026-05-15 | owner identity reset in admin UX + canonical docs alignment | runtime-v1.1.4 |
 | v1.1.5 | 2026-05-15 | canonical `owner_profile` table + first-party `/admin/me` editing path | runtime-v1.1.5 |
 | v1.1.6 | 2026-05-15 | canonical `relationship_annotation` table + owner→person context editing and filtering | runtime-v1.1.6 |
+| v1.1.7 | 2026-05-19 | chat-level owner-context editing, filtering, and chat detail annotations in admin UI | runtime-v1.1.7 |
 
 ## Open questions
 
@@ -109,4 +112,3 @@
 - profile switching / re-embedding workflows beyond initial alias bootstrap
 - privacy / erase cascade hardening for analytics and vector projections
 - stricter controlled vocabulary or relationship labels on top of free-form manual tags
-- chat-level `relationship_annotation` workflows and UI, so the same segmentation model works not only for people but also for group chats and channels
