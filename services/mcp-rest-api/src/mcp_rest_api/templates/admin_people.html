@@ -87,6 +87,10 @@
                   {% if person.blocked %}Разблокировать{% else %}Блокировать{% endif %}
                 </button>
               </form>
+              <form method="post" action="/admin/people/{{ person.id }}/erase" class="inline-form">
+                <input type="hidden" name="redirect_to" value="/admin/people" />
+                <button type="submit" class="button warn">Удалить</button>
+              </form>
             </div>
           </td>
         </tr>

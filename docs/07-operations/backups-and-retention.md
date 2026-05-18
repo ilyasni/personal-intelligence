@@ -66,15 +66,20 @@ Drill — раз в месяц, результаты в audit-log как `system
 
 ## Каскадное удаление (GDPR)
 
-Триггер — `DELETE /v1/persons/{id}/erase`. `services/maintenance` выполняет:
+Триггер — `DELETE /v1/persons/{id}/erase` или operator action в админке. Текущее состояние runtime на `2026-05-19`:
 
-1. Postgres: `DELETE FROM person WHERE id=$1` (FK CASCADE).
+1. Postgres: каноническое удаление `person`, связанных `analysis_window`, `analytics_signal`, `extracted_fact`, `interaction`, `task`; FK-каскады дочищают `chat_membership`, `mention`, `relationship_annotation`.
 2. Neo4j: `MATCH (p:Person {id:$1}) DETACH DELETE p`.
-3. Qdrant: для каждой collection — `delete by filter(payload.person_ids contains $1)`.
-4. Object storage: удалить все ключи с person_id (тегированы при загрузке).
+3. Qdrant: `delete by filter(payload.person_ids contains $1)` по активному alias.
+4. Object storage: best-effort удаление `interaction`-artifact keys из canonical `source_object_ref`.
 5. Audit: `system.erase.person` с pseudonymized id (sha256(id)).
 
-Всё под одной транзакцией невозможно (multi-store), поэтому используется **saga** с retry. Каждый шаг идемпотентен; в случае сбоя — повторный запуск.
+Всё под одной транзакцией невозможно (multi-store), поэтому используется **saga** с retry semantics: канонический delete фиксируется первым, derived cleanup идёт best-effort и записывает warnings в результат job/audit.
+
+Оставшийся hardening:
+
+- durable job persistence, а не только in-process job store в `mcp-rest-api`;
+- полное удаление raw ingress objects, когда pipeline начнёт хранить per-person object refs/tagging в canonical слое.
 
 ## Audit и compliance
 

@@ -33,6 +33,7 @@ REST-эндпоинты обслуживают Admin UI и внутренние 
 - `GET /v1/persons/{id}/context?query=&hops=` — то же, что MCP `get_person_context`.
 - `GET /v1/persons/{id}/export` — zip-экспорт.
 - `DELETE /v1/persons/{id}/erase` — GDPR-каскадное удаление (async, возвращает job id).
+- Текущий runtime также поддерживает совместимый `POST /persons/{id}/erase` и `GET /jobs/{job_id}` без version-prefix, потому что server-rendered admin сейчас работает поверх unprefixed FastAPI routes.
 
 ### `/v1/tasks`
 - `GET /v1/tasks?status=open&due_before=` — список.
@@ -89,6 +90,7 @@ REST-эндпоинты обслуживают Admin UI и внутренние 
 
 - `POST /v1/persons/{id}/erase` → `202 Accepted` + `Location: /v1/jobs/{job_id}`.
 - `GET /v1/jobs/{job_id}` → статус (`queued`, `running`, `done`, `failed`), прогресс, результат.
+- В текущем baseline job-store хранится в памяти процесса `mcp-rest-api`; это подходит для single-owner self-host runtime, но durable queue/job persistence остаётся следующим шагом hardening.
 
 ## OpenAPI
 

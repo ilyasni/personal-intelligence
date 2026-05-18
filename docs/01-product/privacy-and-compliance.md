@@ -45,6 +45,12 @@ PIL хранит чувствительные данные о третьих л�
 
 Все три действия логируются в audit с указанием инициатора.
 
+Текущее состояние erase на `2026-05-19`:
+
+- удаление уже проходит через Postgres + Qdrant + Neo4j и best-effort cleanup derived S3 artifacts;
+- результат доступен как job status в API и как operator action в админке;
+- raw ingress objects ещё не полностью адресуемы для person-specific erase, потому что pipeline пока не хранит для них канонические per-person object refs.
+
 ## Шифрование
 
 - Все диски Proxmox-узла шифруются на уровне LUKS (отв. оператор инсталляции).

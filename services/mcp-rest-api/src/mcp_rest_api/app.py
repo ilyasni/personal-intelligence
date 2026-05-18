@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, cast
 from urllib.parse import quote
 
 import asyncpg
-from fastapi import APIRouter, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter, BackgroundTasks, FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from neo4j import AsyncGraphDatabase
@@ -19,7 +21,7 @@ from qdrant_client import AsyncQdrantClient, models
 
 from mcp_rest_api.settings import settings
 from pil_contracts import STREAM_AI_REPROCESS_WINDOW, ReprocessWindowCommand
-from pil_storage import RedisClient
+from pil_storage import RedisClient, S3Client
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
@@ -210,6 +212,8 @@ FLASH_MESSAGES = {
     "owner_profile_saved": ("success", "Контекст владельца сохранён."),
     "relationship_annotation_saved": ("success", "Контекст отношений сохранён."),
     "owner_profile_readonly": ("info", "Профиль владельца вынесен в отдельный first-party раздел и не редактируется как обычная персона."),
+    "person_erased": ("success", "Профиль удалён из канонической памяти и выведен из админки."),
+    "person_erased_with_warnings": ("warn", "Профиль удалён, но часть производных следов потребует дополнительной дочистки."),
 }
 
 
@@ -227,6 +231,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     db_pool = await asyncpg.create_pool(pg_dsn, min_size=1, max_size=8)
     redis = RedisClient(url=settings.redis_url, password=settings.redis_password or None)
     qdrant = AsyncQdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
+    s3 = S3Client(
+        endpoint_url=settings.s3_endpoint_url,
+        access_key_id=settings.s3_access_key_id,
+        secret_access_key=settings.s3_secret_access_key,
+        region=settings.s3_region,
+        bucket_raw=settings.s3_bucket_raw,
+        bucket_media=settings.s3_bucket_media,
+    )
     neo4j_driver = None
     if settings.neo4j_password:
         neo4j_driver = AsyncGraphDatabase.driver(
@@ -238,7 +250,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.db_pool = db_pool
     app.state.redis = redis
     app.state.qdrant = qdrant
+    app.state.s3 = s3
     app.state.neo4j_driver = neo4j_driver
+    app.state.jobs = {}
     yield
     if neo4j_driver is not None:
         await neo4j_driver.close()
@@ -303,6 +317,308 @@ def _admin_template_response(
     )
     _apply_admin_no_cache_headers(response)
     return response
+
+
+def _hash_identifier(raw_id: str) -> str:
+    return hashlib.sha256(raw_id.encode("utf-8")).hexdigest()
+
+
+def _rowcount_from_execute(result: str) -> int:
+    try:
+        return int(result.rsplit(" ", maxsplit=1)[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
+async def _write_audit_entry(
+    app: FastAPI,
+    *,
+    actor: str,
+    action: str,
+    target: str,
+    payload: dict[str, Any],
+) -> None:
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO audit_log (actor, action, target, payload)
+            VALUES ($1, $2, $3, $4::jsonb)
+            """,
+            actor,
+            action,
+            target,
+            json.dumps(payload, ensure_ascii=False, default=str),
+        )
+
+
+async def _validate_person_erase_target(app: FastAPI, person_id: str) -> dict[str, Any]:
+    pool: asyncpg.Pool = app.state.db_pool
+    async with pool.acquire() as conn:
+        person = await conn.fetchrow(
+            """
+            SELECT id, display_name, tg_user_id, is_owner
+            FROM person
+            WHERE id = $1::uuid
+            """,
+            person_id,
+        )
+        if person is None:
+            raise HTTPException(status_code=404, detail="person_not_found")
+        owner_backing = await conn.fetchval(
+            """
+            SELECT EXISTS(
+                SELECT 1
+                FROM owner_profile
+                WHERE backing_person_id = $1::uuid
+            )
+            """,
+            person_id,
+        )
+    if bool(person["is_owner"]) or bool(owner_backing):
+        raise HTTPException(status_code=400, detail="owner_profile_cannot_be_erased")
+    return dict(person)
+
+
+async def erase_person_cascade(
+    app: FastAPI,
+    person_id: str,
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    person = await _validate_person_erase_target(app, person_id)
+    pool: asyncpg.Pool = app.state.db_pool
+    qdrant: AsyncQdrantClient = app.state.qdrant
+    s3: S3Client = app.state.s3
+    neo4j_driver = app.state.neo4j_driver
+    hashed_target = _hash_identifier(person_id)
+    warnings: list[str] = []
+
+    async with pool.acquire() as conn, conn.transaction():
+        relationship_count = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM relationship_annotation
+            WHERE person_id = $1::uuid
+            """,
+            person_id,
+        ) or 0
+        membership_count = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM chat_membership
+            WHERE person_id = $1::uuid
+            """,
+            person_id,
+        ) or 0
+        mention_count = await conn.fetchval(
+            """
+            SELECT count(*)::int
+            FROM mention
+            WHERE speaker_person_id = $1::uuid
+               OR mentioned_person_id = $1::uuid
+            """,
+            person_id,
+        ) or 0
+        task_rows = await conn.fetch(
+            """
+            SELECT id
+            FROM task
+            WHERE owner_person_id = $1::uuid
+               OR counterpart_person_id = $1::uuid
+            """,
+            person_id,
+        )
+        interaction_rows = await conn.fetch(
+            """
+            SELECT id, source_object_ref
+            FROM interaction
+            WHERE $1::uuid = ANY(participants)
+            """,
+            person_id,
+        )
+        window_rows: list[asyncpg.Record] = []
+        tg_user_id = person.get("tg_user_id")
+        if tg_user_id is not None:
+            window_rows = await conn.fetch(
+                """
+                SELECT id
+                FROM analysis_window
+                WHERE $1::bigint = ANY(participant_tg_ids)
+                """,
+                tg_user_id,
+            )
+
+        task_ids = [row["id"] for row in task_rows]
+        interaction_ids = [row["id"] for row in interaction_rows]
+        analysis_window_ids = [row["id"] for row in window_rows]
+        source_object_refs = [
+            str(row["source_object_ref"])
+            for row in interaction_rows
+            if row["source_object_ref"] is not None and str(row["source_object_ref"])
+        ]
+
+        deleted_analytics_signals = 0
+        deleted_extracted_facts = 0
+        deleted_analysis_windows = 0
+        if analysis_window_ids:
+            deleted_analytics_signals = _rowcount_from_execute(
+                await conn.execute(
+                    """
+                    DELETE FROM analytics_signal
+                    WHERE window_id = ANY($1::uuid[])
+                    """,
+                    analysis_window_ids,
+                )
+            )
+            deleted_extracted_facts = _rowcount_from_execute(
+                await conn.execute(
+                    """
+                    DELETE FROM extracted_fact
+                    WHERE window_id = ANY($1::uuid[])
+                    """,
+                    analysis_window_ids,
+                )
+            )
+            deleted_analysis_windows = _rowcount_from_execute(
+                await conn.execute(
+                    """
+                    DELETE FROM analysis_window
+                    WHERE id = ANY($1::uuid[])
+                    """,
+                    analysis_window_ids,
+                )
+            )
+
+        deleted_interactions = 0
+        if interaction_ids:
+            deleted_interactions = _rowcount_from_execute(
+                await conn.execute(
+                    """
+                    DELETE FROM interaction
+                    WHERE id = ANY($1::uuid[])
+                    """,
+                    interaction_ids,
+                )
+            )
+
+        deleted_tasks = 0
+        if task_ids:
+            deleted_tasks = _rowcount_from_execute(
+                await conn.execute(
+                    """
+                    DELETE FROM task
+                    WHERE id = ANY($1::uuid[])
+                    """,
+                    task_ids,
+                )
+            )
+
+        deleted_people = _rowcount_from_execute(
+            await conn.execute(
+                """
+                DELETE FROM person
+                WHERE id = $1::uuid
+                """,
+                person_id,
+            )
+        )
+        if deleted_people == 0:
+            raise HTTPException(status_code=404, detail="person_not_found")
+
+    try:
+        await qdrant.delete(
+            collection_name=settings.qdrant_alias_name,
+            points_selector=models.FilterSelector(
+                filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="person_ids",
+                            match=models.MatchAny(any=[person_id]),
+                        )
+                    ]
+                )
+            ),
+            wait=True,
+        )
+    except Exception:
+        warnings.append("qdrant_cleanup_failed")
+
+    if neo4j_driver is not None:
+        try:
+            async with neo4j_driver.session(database=settings.neo4j_database) as session:
+                await session.run("MATCH (p:Person {id: $person_id}) DETACH DELETE p", person_id=person_id)
+        except Exception:
+            warnings.append("neo4j_cleanup_failed")
+
+    deleted_object_refs = 0
+    if source_object_refs:
+        if s3.is_configured:
+            for source_object_ref in source_object_refs:
+                try:
+                    await s3.delete_bucket_object(s3.bucket_raw, source_object_ref)
+                    deleted_object_refs += 1
+                except Exception:
+                    warnings.append("s3_cleanup_failed")
+                    break
+        else:
+            warnings.append("s3_not_configured")
+
+    summary = {
+        "person_id": person_id,
+        "display_name": person.get("display_name"),
+        "target_hash": hashed_target,
+        "deleted": {
+            "person": deleted_people,
+            "relationship_annotations": int(relationship_count),
+            "memberships": int(membership_count),
+            "mentions": int(mention_count),
+            "tasks": int(deleted_tasks),
+            "analysis_windows": int(deleted_analysis_windows),
+            "analytics_signals": int(deleted_analytics_signals),
+            "extracted_facts": int(deleted_extracted_facts),
+            "interactions": int(deleted_interactions),
+            "interaction_artifacts": int(deleted_object_refs),
+        },
+        "warnings": warnings,
+    }
+    await _write_audit_entry(
+        app,
+        actor=actor,
+        action="system.erase.person",
+        target=hashed_target,
+        payload=summary,
+    )
+    return summary
+
+
+async def _run_person_erase_job(app: FastAPI, job_id: str, person_id: str) -> None:
+    jobs: dict[str, dict[str, Any]] = app.state.jobs
+    jobs[job_id] = {"job_id": job_id, "person_id": person_id, "status": "running"}
+    try:
+        result = await erase_person_cascade(app, person_id, actor="system")
+    except HTTPException as exc:
+        jobs[job_id] = {
+            "job_id": job_id,
+            "person_id": person_id,
+            "status": "failed",
+            "error": exc.detail,
+        }
+        return
+    except Exception as exc:
+        jobs[job_id] = {
+            "job_id": job_id,
+            "person_id": person_id,
+            "status": "failed",
+            "error": str(exc),
+        }
+        return
+    jobs[job_id] = {
+        "job_id": job_id,
+        "person_id": person_id,
+        "status": "done",
+        "result": result,
+    }
 
 
 async def get_open_tasks_data(app: FastAPI, limit: int = 50) -> list[dict[str, Any]]:
@@ -1182,6 +1498,34 @@ async def person_context(request: Request, person_id: str) -> dict[str, Any]:
     return await get_person_context_data(request.app, person_id)
 
 
+@router.api_route("/persons/{person_id}/erase", methods=["POST", "DELETE"])
+@router.api_route("/v1/persons/{person_id}/erase", methods=["POST", "DELETE"], include_in_schema=False)
+async def erase_person_api(
+    request: Request,
+    person_id: str,
+    background_tasks: BackgroundTasks,
+) -> JSONResponse:
+    await _validate_person_erase_target(request.app, person_id)
+    job_id = str(uuid.uuid4())
+    request.app.state.jobs[job_id] = {"job_id": job_id, "person_id": person_id, "status": "queued"}
+    background_tasks.add_task(_run_person_erase_job, request.app, job_id, person_id)
+    return JSONResponse(
+        status_code=202,
+        headers={"Location": f"/jobs/{job_id}"},
+        content={"job_id": job_id, "status": "queued"},
+    )
+
+
+@router.get("/jobs/{job_id}")
+@router.get("/v1/jobs/{job_id}", include_in_schema=False)
+async def job_status(request: Request, job_id: str) -> dict[str, Any]:
+    jobs: dict[str, dict[str, Any]] = request.app.state.jobs
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job_not_found")
+    return job
+
+
 @router.post("/reprocess/window")
 async def reprocess_window(request: Request, window_id: str) -> dict[str, str]:
     redis: RedisClient = request.app.state.redis
@@ -1421,6 +1765,17 @@ async def admin_person_relationship_annotation(
         note=_normalize_optional_text(form_data.relationship_note),
     )
     return _redirect_with_flash(form_data.redirect_to, "relationship_annotation_saved")
+
+
+@router.post("/admin/people/{person_id}/erase", include_in_schema=False)
+async def admin_person_erase(
+    request: Request,
+    person_id: str,
+    redirect_to: Annotated[str, Form()] = "/admin/people",
+) -> RedirectResponse:
+    summary = await erase_person_cascade(request.app, person_id, actor="ui:owner")
+    flash_key = "person_erased_with_warnings" if summary["warnings"] else "person_erased"
+    return _redirect_with_flash(redirect_to, flash_key)
 
 
 @router.get("/admin/chats", response_class=HTMLResponse, include_in_schema=False)

@@ -14,6 +14,7 @@ class _S3BodyReader(Protocol):
 class _S3ClientProtocol(Protocol):
     async def put_object(self, **kwargs: Any) -> Any: ...
     async def get_object(self, **kwargs: Any) -> dict[str, Any]: ...
+    async def delete_object(self, **kwargs: Any) -> Any: ...
 
 
 @dataclass
@@ -78,3 +79,7 @@ class S3Client:
             response = await client.get_object(Bucket=self.bucket_raw, Key=key)
             body = cast("_S3BodyReader", response["Body"])
             return bytes(await body.read())
+
+    async def delete_bucket_object(self, bucket: str, key: str) -> None:
+        async with self._client() as client:
+            await client.delete_object(Bucket=bucket, Key=key)

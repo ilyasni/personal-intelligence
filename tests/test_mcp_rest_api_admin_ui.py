@@ -18,6 +18,7 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
         "owner_profile_updates": [],
         "relationship_annotation_updates": [],
         "chat_relationship_annotation_updates": [],
+        "person_erase_updates": [],
     }
 
     async def fake_overview(_app: Any, days: int = 14) -> dict[str, Any]:
@@ -291,6 +292,21 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     ) -> None:
         state["chat_relationship_annotation_updates"].append((chat_id, labels, note))
 
+    async def fake_erase_person_cascade(
+        _app: Any,
+        person_id: str,
+        *,
+        actor: str,
+    ) -> dict[str, Any]:
+        state["person_erase_updates"].append((person_id, actor))
+        return {
+            "person_id": person_id,
+            "display_name": "Ilyas",
+            "target_hash": "hashed",
+            "deleted": {"person": 1},
+            "warnings": [],
+        }
+
     monkeypatch.setattr(mcp_app, "get_analytics_overview_data", fake_overview)
     monkeypatch.setattr(mcp_app, "get_conversation_data", fake_conversations)
     monkeypatch.setattr(mcp_app, "get_open_tasks_data", fake_tasks)
@@ -308,7 +324,10 @@ def _build_app(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(mcp_app, "update_owner_profile", fake_update_owner_profile)
     monkeypatch.setattr(mcp_app, "update_person_relationship_annotation", fake_update_person_relationship_annotation)
     monkeypatch.setattr(mcp_app, "update_chat_relationship_annotation", fake_update_chat_relationship_annotation)
-    return mcp_app.create_app(use_lifespan=False), state
+    monkeypatch.setattr(mcp_app, "erase_person_cascade", fake_erase_person_cascade)
+    app = mcp_app.create_app(use_lifespan=False)
+    app.state.jobs = {}
+    return app, state
 
 
 def test_analytics_redirects_to_admin(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -569,6 +588,19 @@ def test_person_annotations_post_redirects(monkeypatch: pytest.MonkeyPatch) -> N
     ]
 
 
+def test_person_erase_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, state = _build_app(monkeypatch)
+    with TestClient(app) as client:
+        response = client.post(
+            "/admin/people/person-1/erase",
+            data={"redirect_to": "/admin/people"},
+            follow_redirects=False,
+        )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/people?flash=person_erased"
+    assert state["person_erase_updates"] == [("person-1", "ui:owner")]
+
+
 def test_person_relationship_post_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
     app, state = _build_app(monkeypatch)
     with TestClient(app) as client:
@@ -586,6 +618,26 @@ def test_person_relationship_post_redirects(monkeypatch: pytest.MonkeyPatch) -> 
     assert state["relationship_annotation_updates"] == [
         ("person-1", ["коллега", "frontier", "работа"], "Основной рабочий контакт.")
     ]
+
+
+def test_person_erase_api_queues_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, state = _build_app(monkeypatch)
+
+    async def fake_validate_person(_app: Any, person_id: str) -> dict[str, Any]:
+        return {"id": person_id, "display_name": "Ilyas", "tg_user_id": 77, "is_owner": False}
+
+    monkeypatch.setattr(mcp_app, "_validate_person_erase_target", fake_validate_person)
+
+    with TestClient(app) as client:
+        response = client.post("/persons/person-1/erase")
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+        job_response = client.get(f"/jobs/{job_id}")
+
+    assert response.headers["location"] == f"/jobs/{job_id}"
+    assert job_response.status_code == 200
+    assert job_response.json()["status"] == "done"
+    assert state["person_erase_updates"] == [("person-1", "system")]
 
 
 def test_owner_annotations_post_redirects_to_admin_me(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     neo4j_password: str = ""
     neo4j_database: str = "neo4j"
 
+    s3_endpoint_url: str = "https://s3.cloud.ru"
+    s3_bucket_raw: str = "pil-raw"
+    s3_bucket_media: str = "pil-raw-media"
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    s3_region: str = "ru-central-1"
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 
